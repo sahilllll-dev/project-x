@@ -9,6 +9,25 @@
   background: #fff;
 }
 
+.app-header__menu-toggle {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  place-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.app-header__menu-toggle span {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: #374151;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 1.125rem;
@@ -289,6 +308,78 @@
 
 .notification-menu__item:hover {
   background: #f8fafc;
+}
+
+@media (max-width: 1180px) {
+  .app-header {
+    grid-template-columns: auto minmax(120px, 1fr) auto;
+  }
+
+  .app-header__menu-toggle {
+    display: grid;
+  }
+
+  .app-header__search {
+    display: none;
+  }
+
+  .app-header__actions {
+    gap: 8px;
+  }
+
+  .visit-store-button {
+    max-width: 160px;
+  }
+
+  .app-header__user {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    height: auto;
+    min-height: 60px;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .app-header h1 {
+    font-size: 1rem;
+  }
+
+  .visit-store-button__url,
+  .app-header__logout {
+    display: none;
+  }
+
+  .visit-store-button {
+    min-height: 36px;
+    padding: 8px 10px;
+  }
+
+  .header-icon-button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .notification-menu {
+    position: fixed;
+    top: 62px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header__actions {
+    gap: 6px;
+  }
+
+  .visit-store-button {
+    display: none;
+  }
 }
 
 .notification-menu__item strong {

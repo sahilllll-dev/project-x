@@ -43,7 +43,7 @@ function formatNotificationDate(value) {
   })
 }
 
-function Header() {
+function Header({ onMenuToggle }) {
   const location = useLocation()
   const navigate = useNavigate()
   const searchInputRef = useRef(null)
@@ -121,6 +121,17 @@ function Header() {
 
   return (
     <header className="app-header">
+      <button
+        className="app-header__menu-toggle"
+        type="button"
+        aria-label="Open sidebar"
+        onClick={onMenuToggle}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
+
       <div className="app-header__title">
         <h1>{currentTitle}</h1>
       </div>

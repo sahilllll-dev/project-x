@@ -1,5 +1,6 @@
 .app-sidebar {
   width: 260px;
+  flex: 0 0 260px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -342,4 +343,43 @@
   background: #f0e3d6;
   font-size: 11px;
   color: #7c5a3a;
+}
+
+@media (max-width: 1180px) {
+  .app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(82vw, 300px);
+    transform: translateX(-105%);
+    box-shadow: 24px 0 60px rgba(15, 23, 42, 0.16);
+    transition: transform 220ms ease;
+  }
+
+  .layout--sidebar-open .app-sidebar {
+    transform: translateX(0);
+  }
+
+  .layout__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    display: block;
+    border: 0;
+    background: rgba(15, 23, 42, 0.34);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+  }
+
+  .layout--sidebar-open .layout__backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-store-dropdown {
+    left: 0;
+    right: auto;
+    width: min(320px, calc(100vw - 28px));
+  }
 }
