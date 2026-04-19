@@ -1,57 +1,23 @@
-const path = require('node:path')
-const fs = require('node:fs')
 const express = require('express')
 const cors = require('cors')
-const bodyParser = require('body-parser')
 const nodemailer = require('nodemailer')
 const { createClient } = require('@supabase/supabase-js')
-const { getSupabaseAdmin, isSupabaseAdminConfigured } = require('./supabaseAdmin')
-const { readData, writeData } = require('./utils/fileDb')
-
-function loadLocalEnv() {
-  const envPath = path.join(__dirname, '.env')
-
-  if (!fs.existsSync(envPath)) {
-    return
-  }
-
-  const entries = fs.readFileSync(envPath, 'utf8').split(/\r?\n/)
-
-  entries.forEach((entry) => {
-    const trimmedEntry = entry.trim()
-
-    if (!trimmedEntry || trimmedEntry.startsWith('#') || !trimmedEntry.includes('=')) {
-      return
-    }
-
-    const separatorIndex = trimmedEntry.indexOf('=')
-    const key = trimmedEntry.slice(0, separatorIndex).trim()
-    const value = trimmedEntry.slice(separatorIndex + 1).trim()
-
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value
-    }
-  })
-}
-
-loadLocalEnv()
 
 const app = express()
 const PORT = process.env.PORT || 5001
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-)
-const supabaseAdmin = isSupabaseAdminConfigured ? getSupabaseAdmin() : null
 
-const productsFile = path.join(__dirname, 'data', 'products.json')
-const ordersFile = path.join(__dirname, 'data', 'orders.json')
-const orderTimelineFile = path.join(__dirname, 'data', 'orderTimeline.json')
-const customersFile = path.join(__dirname, 'data', 'customers.json')
-const couponsFile = path.join(__dirname, 'data', 'coupons.json')
-const usersFile = path.join(__dirname, 'data', 'users.json')
-const storesFile = path.join(__dirname, 'data', 'stores.json')
-const storeAppsFile = path.join(__dirname, 'data', 'storeApps.json')
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabase =
+  supabaseUrl && supabaseServiceRoleKey
+    ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : null
+
 const defaultThemeConfig = {
   heroTitle: 'Welcome to your store',
   showBrands: true,
@@ -69,23 +35,392 @@ const apps = [
   },
 ]
 
-function getCurrency(value) {
-  return `INR ${Number(value || 0).toLocaleString('en-IN')}`
+const themes = [
+  {
+    id: 'minimal',
+    name: 'Minimal Store',
+    description: 'Clean and simple layout',
+  },
+  {
+    id: 'modern',
+    name: 'Modern Store',
+    description: 'Bold and product-focused layout',
+  },
+  {
+    id: 'kalles',
+    name: 'Kalles Style',
+    description: 'Modern fashion eCommerce layout with hero banners and product grid',
+  },
+]
+
+const allowedOrigins = ['http://localhost:5173', process.env.FRONTEND_URL].filter(Boolean)
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true)
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true)
+      }
+
+      console.log('❌ Blocked by CORS:', origin)
+      return callback(new Error('Not allowed by CORS'))
+    },
+    credentials: true,
+  }),
+)
+app.use((req, res, next) => {
+  console.log(`Incoming request from origin: ${req.headers.origin}`)
+  next()
+})
+app.use(express.json({ limit: '5mb' }))
+
+function requireSupabase(res) {
+  if (!supabase) {
+    res.status(500).json({ message: 'Supabase is not configured' })
+    return false
+  }
+
+  return true
 }
 
-function getStoreOwnerEmail(storeId) {
-  const stores = readData(storesFile)
-  const users = readData(usersFile)
-  const store = stores.find((entry) => String(entry.id) === String(storeId))
-  const owner = users.find((user) => String(user.id) === String(store?.userId))
+function normalizeStoreSlug(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.projectx\.com$/i, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
 
-  return (
-    store?.ownerEmail ||
-    owner?.email ||
-    process.env.ORDER_NOTIFICATION_EMAIL ||
-    process.env.SMTP_USER ||
-    ''
-  )
+function normalizeStoreUrl(value) {
+  const slug = normalizeStoreSlug(value)
+  return slug ? `${slug}.projectx.com` : ''
+}
+
+function getDraftSlug() {
+  return `draft-${Date.now()}`
+}
+
+function getThemeConfig(themeConfig) {
+  return {
+    ...defaultThemeConfig,
+    ...(themeConfig ?? {}),
+  }
+}
+
+function toStore(row) {
+  if (!row) {
+    return null
+  }
+
+  const isDraft = String(row.slug ?? '').startsWith('draft-') && !String(row.name ?? '').trim()
+
+  return {
+    id: row.id,
+    userId: row.owner_id,
+    ownerId: row.owner_id,
+    ownerEmail: row.owner_email ?? '',
+    name: row.name ?? '',
+    slug: isDraft ? '' : row.slug ?? '',
+    url: isDraft ? '' : row.subdomain ?? normalizeStoreUrl(row.slug),
+    themeId: row.theme_id ?? 'minimal',
+    themeConfig: getThemeConfig(row.theme_config),
+    onboardingStep: Number(row.onboarding_step) || 1,
+    isOnboardingCompleted: Boolean(row.is_onboarding_completed),
+    logoUrl: row.logo_url ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function getDefaultProductSeo(product) {
+  return {
+    title: product?.title ?? '',
+    description: product?.description ?? '',
+    slug: String(product?.id ?? ''),
+    ...(product?.seo ?? {}),
+  }
+}
+
+function toProduct(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    ownerId: row.owner_id,
+    title: row.title ?? '',
+    description: row.description ?? '',
+    category: row.category ?? '',
+    price: Number(row.price) || 0,
+    discountedPrice: Number(row.discounted_price) || 0,
+    quantity: Number(row.quantity) || 0,
+    lowStockThreshold: Number(row.low_stock_threshold ?? defaultLowStockThreshold),
+    sku: row.sku ?? '',
+    status: row.status ?? 'inactive',
+    image: row.image_url ?? '',
+    imageUrl: row.image_url ?? '',
+    galleryImage: row.gallery_image ?? '',
+    limitSinglePurchase: Boolean(row.limit_single_purchase),
+    shipping: row.shipping ?? {},
+    seo: getDefaultProductSeo(row),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toCoupon(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    code: row.code,
+    type: row.type,
+    value: Number(row.value) || 0,
+    minOrderValue: Number(row.min_order_value) || 0,
+    maxDiscount: row.max_discount === null ? '' : Number(row.max_discount) || 0,
+    usageLimit: row.usage_limit === null ? '' : Number(row.usage_limit) || 0,
+    usedCount: Number(row.used_count) || 0,
+    expiresAt: row.expires_at ?? '',
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at,
+  }
+}
+
+function toCustomer(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    name: row.name ?? '',
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    totalOrders: Number(row.total_orders) || 0,
+    totalSpent: Number(row.total_spent) || 0,
+    createdAt: row.created_at,
+  }
+}
+
+function toTimeline(row) {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    status: row.status,
+    message: row.message,
+    createdAt: row.created_at,
+  }
+}
+
+function toOrder(row) {
+  if (!row) {
+    return null
+  }
+
+  const products =
+    Array.isArray(row.products) && row.products.length > 0
+      ? row.products
+      : [
+          {
+            productId: row.product_id,
+            title: row.product_title,
+            quantity: 1,
+            price: Number(row.price) || 0,
+          },
+        ].filter((product) => product.productId || product.title)
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    ownerId: row.owner_id,
+    customerId: row.customer_id,
+    customerName: row.customer_name ?? '',
+    customerEmail: row.customer_email ?? '',
+    phone: row.phone ?? '',
+    products,
+    subtotalAmount: Number(row.subtotal_amount ?? row.total_amount ?? row.price) || 0,
+    discountAmount: Number(row.discount_amount) || 0,
+    finalAmount: Number(row.final_amount ?? row.total_amount ?? row.price) || 0,
+    couponCode: row.coupon_code ?? '',
+    totalAmount: Number(row.total_amount ?? row.final_amount ?? row.price) || 0,
+    paymentMethod: row.payment_method ?? 'cod',
+    paymentStatus: row.payment_status ?? 'pending',
+    fulfillmentStatus: row.fulfillment_status ?? 'unfulfilled',
+    orderStatus: row.order_status ?? 'open',
+    shippingAddress: row.shipping_address ?? row.address ?? '',
+    createdAt: row.created_at,
+  }
+}
+
+function normalizeCouponCode(code) {
+  return String(code ?? '').trim().toUpperCase()
+}
+
+function calculateCouponDiscount(coupon, orderAmount) {
+  const amount = Number(orderAmount) || 0
+  let discountAmount = 0
+
+  if (coupon.type === 'percentage') {
+    discountAmount = (amount * Number(coupon.value)) / 100
+
+    if (coupon.max_discount) {
+      discountAmount = Math.min(discountAmount, Number(coupon.max_discount))
+    }
+  }
+
+  if (coupon.type === 'fixed') {
+    discountAmount = Number(coupon.value)
+  }
+
+  discountAmount = Math.min(discountAmount, amount)
+
+  return {
+    discountAmount,
+    finalAmount: amount - discountAmount,
+  }
+}
+
+async function getStoreById(storeId) {
+  const { data, error } = await supabase
+    .from('stores')
+    .select('*')
+    .eq('id', storeId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+async function createOrderTimelineEntry(orderId, status, message) {
+  const { data, error } = await supabase
+    .from('order_timeline')
+    .insert([{ order_id: orderId, status, message }])
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return toTimeline(data)
+}
+
+async function validateCouponForOrder({ storeId, code, orderAmount }) {
+  const normalizedCode = normalizeCouponCode(code)
+  const { data: coupon, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('code', normalizedCode)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!coupon) {
+    return { isValid: false, message: 'Coupon not found' }
+  }
+
+  if (!coupon.is_active) {
+    return { isValid: false, message: 'Coupon is inactive' }
+  }
+
+  if (coupon.expires_at && new Date(coupon.expires_at).getTime() <= Date.now()) {
+    return { isValid: false, message: 'Coupon has expired' }
+  }
+
+  if (coupon.usage_limit && Number(coupon.used_count || 0) >= Number(coupon.usage_limit)) {
+    return { isValid: false, message: 'Coupon usage limit exceeded' }
+  }
+
+  if (coupon.min_order_value && Number(orderAmount) < Number(coupon.min_order_value)) {
+    return { isValid: false, message: 'Minimum order value not met' }
+  }
+
+  return {
+    isValid: true,
+    coupon,
+    ...calculateCouponDiscount(coupon, orderAmount),
+  }
+}
+
+async function upsertCustomerForOrder(order) {
+  const email = String(order.customerEmail ?? '').trim().toLowerCase()
+
+  if (!email) {
+    return null
+  }
+
+  const { data: existingCustomer, error: findError } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('store_id', order.storeId)
+    .eq('email', email)
+    .maybeSingle()
+
+  if (findError) {
+    throw findError
+  }
+
+  if (existingCustomer) {
+    const { data, error } = await supabase
+      .from('customers')
+      .update({
+        name: order.customerName || existingCustomer.name,
+        phone: order.phone || existingCustomer.phone,
+        total_orders: Number(existingCustomer.total_orders || 0) + 1,
+        total_spent: Number(existingCustomer.total_spent || 0) + Number(order.totalAmount || 0),
+      })
+      .eq('id', existingCustomer.id)
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    return toCustomer(data)
+  }
+
+  const { data, error } = await supabase
+    .from('customers')
+    .insert([
+      {
+        store_id: order.storeId,
+        name: order.customerName ?? '',
+        email,
+        phone: order.phone ?? '',
+        total_orders: 1,
+        total_spent: Number(order.totalAmount || 0),
+      },
+    ])
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return toCustomer(data)
+}
+
+function getCurrency(value) {
+  return `INR ${Number(value || 0).toLocaleString('en-IN')}`
 }
 
 function createMailTransport() {
@@ -107,1106 +442,618 @@ function createMailTransport() {
   return nodemailer.createTransport({ jsonTransport: true })
 }
 
-function getOrderNotificationBody(order) {
-  const productLines = order.products
-    .map((product) => {
-      const quantity = Number(product.quantity) || 1
-      return `- ${product.title} x ${quantity} (${getCurrency(product.price)})`
-    })
-    .join('\n')
-
-  return [
-    `Order ID: #${order.id}`,
-    `Total: ${getCurrency(order.totalAmount)}`,
-    order.couponCode ? `Coupon: ${order.couponCode}` : '',
-    order.discountAmount ? `Discount: ${getCurrency(order.discountAmount)}` : '',
-    '',
-    'Products:',
-    productLines || '- No products',
-    '',
-    'Customer:',
-    `Name: ${order.customerName || 'Guest customer'}`,
-    `Email: ${order.customerEmail || 'Not provided'}`,
-    `Phone: ${order.phone || 'Not provided'}`,
-    `Shipping address: ${order.shippingAddress || 'Not provided'}`,
-  ]
-    .filter((line) => line !== '')
-    .join('\n')
-}
-
-const notificationChannels = {
-  async email(order) {
-    const recipient = getStoreOwnerEmail(order.storeId)
+async function notifyNewOrder(order) {
+  try {
+    const store = await getStoreById(order.storeId)
+    const recipient = store?.owner_email || process.env.ORDER_NOTIFICATION_EMAIL || process.env.SMTP_USER
 
     if (!recipient) {
-      return { skipped: true, reason: 'No recipient configured' }
+      return
     }
 
-    const transporter = createMailTransport()
+    const productLines = order.products
+      .map((product) => `- ${product.title} x ${product.quantity || 1} (${getCurrency(product.price)})`)
+      .join('\n')
 
-    return transporter.sendMail({
+    await createMailTransport().sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER || 'Project X <no-reply@projectx.local>',
       to: recipient,
       subject: 'New order received',
-      text: getOrderNotificationBody(order),
+      text: [
+        `Order ID: #${order.id}`,
+        `Total: ${getCurrency(order.totalAmount)}`,
+        order.couponCode ? `Coupon: ${order.couponCode}` : '',
+        order.discountAmount ? `Discount: ${getCurrency(order.discountAmount)}` : '',
+        '',
+        'Products:',
+        productLines || '- No products',
+        '',
+        'Customer:',
+        `Name: ${order.customerName || 'Guest customer'}`,
+        `Email: ${order.customerEmail || 'Not provided'}`,
+        `Phone: ${order.phone || 'Not provided'}`,
+        `Shipping address: ${order.shippingAddress || 'Not provided'}`,
+      ]
+        .filter((line) => line !== '')
+        .join('\n'),
     })
-  },
-  async sms() {
-    return { skipped: true, reason: 'SMS notifications are not configured yet' }
-  },
-  async whatsapp() {
-    return { skipped: true, reason: 'WhatsApp notifications are not configured yet' }
-  },
-}
-
-async function notifyNewOrder(order) {
-  try {
-    await notificationChannels.email(order)
   } catch (error) {
     console.error('Failed to send order email notification', error)
   }
 }
 
-const themes = [
-  {
-    id: 'minimal',
-    name: 'Minimal Store',
-    description: 'Clean and simple layout',
-  },
-  {
-    id: 'modern',
-    name: 'Modern Store',
-    description: 'Bold and product-focused layout',
-  },
-  {
-    id: 'kalles',
-    name: 'Kalles Style',
-    description: 'Modern fashion eCommerce layout with hero banners and product grid',
-  },
-]
+app.get('/products', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-function getDefaultProductSeo(product) {
-  return {
-    title: product.title ?? '',
-    description: product.description ?? '',
-    slug: String(product.id),
-    ...(product.seo ?? {}),
+  try {
+    const storeId = req.query.storeId ?? req.query.store_id
+    let query = supabase.from('products').select('*').order('created_at', { ascending: false })
+
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query
+
+    if (error) return res.status(500).json({ error })
+
+    res.json(data.map(toProduct))
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-}
+})
 
-function getLowStockThreshold(value) {
-  const threshold = Number(value)
+app.get('/product/:slug', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!Number.isFinite(threshold) || threshold < 0) {
-    return defaultLowStockThreshold
+  try {
+    const slug = req.params.slug
+    const { data, error } = await supabase.from('products').select('*')
+
+    if (error) return res.status(500).json({ error })
+
+    const product = data.map(toProduct).find((entry) => {
+      const seo = getDefaultProductSeo(entry)
+      return String(seo.slug) === String(slug) || String(entry.id) === String(slug)
+    })
+
+    if (!product) return res.status(404).json({ message: 'Product not found' })
+
+    res.json(product)
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
+})
 
-  return threshold
-}
+app.post('/products', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-function normalizeProduct(product) {
-  return {
-    ...product,
-    quantity: Number(product.quantity) || 0,
-    lowStockThreshold:
-      product.lowStockThreshold === undefined || product.lowStockThreshold === ''
-        ? defaultLowStockThreshold
-        : getLowStockThreshold(product.lowStockThreshold),
-    seo: getDefaultProductSeo(product),
-  }
-}
+  try {
+    const store = await getStoreById(req.body.storeId ?? req.body.store_id)
 
-function normalizeOrder(order) {
-  const products = Array.isArray(order.products)
-    ? order.products
-    : [
+    if (!store) return res.status(400).json({ message: 'storeId is required' })
+
+    const { data, error } = await supabase
+      .from('products')
+      .insert([
         {
-          productId: order.productId,
-          title: order.productTitle,
-          quantity: 1,
-          price: Number(order.price) || 0,
+          owner_id: store.owner_id,
+          store_id: store.id,
+          title: req.body.title,
+          description: req.body.description ?? '',
+          category: req.body.category ?? '',
+          price: Number(req.body.price) || 0,
+          discounted_price: Number(req.body.discountedPrice) || 0,
+          quantity: Number(req.body.quantity) || 0,
+          low_stock_threshold:
+            req.body.lowStockThreshold === undefined || req.body.lowStockThreshold === ''
+              ? defaultLowStockThreshold
+              : Number(req.body.lowStockThreshold),
+          sku: req.body.sku ?? '',
+          status: req.body.status ?? 'inactive',
+          image_url: req.body.image ?? req.body.imageUrl ?? '',
+          gallery_image: req.body.galleryImage ?? '',
+          shipping: req.body.shipping ?? {},
+          seo: req.body.seo ?? {},
+          limit_single_purchase: Boolean(req.body.limitSinglePurchase),
         },
-      ].filter((product) => product.productId || product.title)
+      ])
+      .select()
+      .single()
 
-  const totalAmount =
-    order.totalAmount ??
-    products.reduce(
-      (total, product) => total + (Number(product.price) || 0) * (Number(product.quantity) || 1),
-      0,
-    )
+    if (error) return res.status(500).json({ error })
 
-  return {
-    id: order.id,
-    storeId: order.storeId,
-    customerId: order.customerId ?? null,
-    customerName: order.customerName ?? '',
-    phone: order.phone ?? '',
-    products,
-    totalAmount,
-    subtotalAmount: order.subtotalAmount ?? totalAmount,
-    discountAmount: order.discountAmount ?? 0,
-    finalAmount: order.finalAmount ?? totalAmount,
-    couponCode: order.couponCode ?? '',
-    paymentMethod: order.paymentMethod ?? 'cod',
-    paymentStatus: order.paymentStatus ?? 'pending',
-    fulfillmentStatus: order.fulfillmentStatus ?? 'unfulfilled',
-    orderStatus: order.orderStatus ?? (order.status === 'cancelled' ? 'cancelled' : 'open'),
-    shippingAddress: order.shippingAddress ?? order.address ?? '',
-    createdAt: order.createdAt ?? Date.now(),
+    res.status(201).json(toProduct(data))
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-}
-
-function getStatusTimelineMessage(nextStatus) {
-  const statusMessages = {
-    paid: 'Payment received',
-    failed: 'Payment failed',
-    pending: 'Payment pending',
-    processing: 'Order processing',
-    shipped: 'Order shipped',
-    delivered: 'Order delivered',
-    unfulfilled: 'Order unfulfilled',
-    open: 'Order opened',
-    completed: 'Order completed',
-    cancelled: 'Order cancelled',
-  }
-
-  return statusMessages[nextStatus] ?? `Status updated to ${nextStatus}`
-}
-
-function createOrderTimelineEntry(orderId, status, message) {
-  const timeline = readData(orderTimelineFile)
-  const entry = {
-    id: Date.now(),
-    orderId,
-    status,
-    message,
-    createdAt: Date.now(),
-  }
-
-  timeline.push(entry)
-  writeData(orderTimelineFile, timeline)
-  return entry
-}
-
-function normalizeCouponCode(code) {
-  return String(code ?? '').trim().toUpperCase()
-}
-
-function normalizeStoreSlug(value) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\.projectx\.com$/i, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function normalizeStoreUrl(value) {
-  const slug = normalizeStoreSlug(value)
-
-  return slug ? `${slug}.projectx.com` : ''
-}
-
-function isStoreUrlTaken(stores, url, excludeStoreId = null) {
-  const normalizedUrl = normalizeStoreUrl(url)
-
-  if (!normalizedUrl) {
-    return false
-  }
-
-  return stores.some(
-    (store) =>
-      String(store.id) !== String(excludeStoreId) &&
-      normalizeStoreUrl(store.url) === normalizedUrl,
-  )
-}
-
-function calculateCouponDiscount(coupon, orderAmount) {
-  const amount = Number(orderAmount) || 0
-  let discountAmount = 0
-
-  if (coupon.type === 'percentage') {
-    discountAmount = (amount * Number(coupon.value)) / 100
-
-    if (coupon.maxDiscount) {
-      discountAmount = Math.min(discountAmount, Number(coupon.maxDiscount))
-    }
-  }
-
-  if (coupon.type === 'fixed') {
-    discountAmount = Number(coupon.value)
-  }
-
-  discountAmount = Math.min(discountAmount, amount)
-
-  return {
-    discountAmount,
-    finalAmount: amount - discountAmount,
-  }
-}
-
-function validateCouponForOrder({ storeId, code, orderAmount }) {
-  const coupons = readData(couponsFile)
-  const normalizedCode = normalizeCouponCode(code)
-  const coupon = coupons.find(
-    (entry) =>
-      String(entry.storeId) === String(storeId) &&
-      normalizeCouponCode(entry.code) === normalizedCode,
-  )
-
-  if (!coupon) {
-    return { isValid: false, message: 'Coupon not found' }
-  }
-
-  if (coupon.isActive !== true) {
-    return { isValid: false, message: 'Coupon is inactive' }
-  }
-
-  if (Number(coupon.expiresAt) <= Date.now()) {
-    return { isValid: false, message: 'Coupon has expired' }
-  }
-
-  if (coupon.usageLimit && Number(coupon.usedCount || 0) >= Number(coupon.usageLimit)) {
-    return { isValid: false, message: 'Coupon usage limit reached' }
-  }
-
-  if (coupon.minOrderValue && Number(orderAmount) < Number(coupon.minOrderValue)) {
-    return { isValid: false, message: 'Minimum order value not reached' }
-  }
-
-  return {
-    isValid: true,
-    coupon,
-    ...calculateCouponDiscount(coupon, orderAmount),
-  }
-}
-
-function upsertCustomerForOrder(order) {
-  const customers = readData(customersFile)
-  const normalizedEmail = String(order.customerEmail ?? order.email ?? '').trim().toLowerCase()
-  const totalAmount = Number(order.totalAmount) || 0
-
-  if (!normalizedEmail) {
-    return null
-  }
-
-  const customerIndex = customers.findIndex(
-    (customer) =>
-      String(customer.storeId) === String(order.storeId) &&
-      String(customer.email).trim().toLowerCase() === normalizedEmail,
-  )
-
-  if (customerIndex !== -1) {
-    customers[customerIndex] = {
-      ...customers[customerIndex],
-      name: order.customerName || customers[customerIndex].name,
-      phone: order.phone || customers[customerIndex].phone,
-      totalOrders: Number(customers[customerIndex].totalOrders || 0) + 1,
-      totalSpent: Number(customers[customerIndex].totalSpent || 0) + totalAmount,
-    }
-
-    writeData(customersFile, customers)
-    return customers[customerIndex]
-  }
-
-  const newCustomer = {
-    id: Date.now(),
-    storeId: order.storeId,
-    name: order.customerName ?? '',
-    email: normalizedEmail,
-    phone: order.phone ?? '',
-    totalOrders: 1,
-    totalSpent: totalAmount,
-    createdAt: Date.now(),
-  }
-
-  customers.push(newCustomer)
-  writeData(customersFile, customers)
-  return newCustomer
-}
-
-const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.FRONTEND_URL,
-]
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (like Postman or mobile apps)
-    if (!origin) return callback(null, true)
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true)
-    } else {
-      console.log('❌ Blocked by CORS:', origin)
-      return callback(new Error('Not allowed by CORS'))
-    }
-  },
-  credentials: true,
-}))
-app.use((req, res, next) => {
-  console.log(`Incoming request from origin: ${req.headers.origin}`)
-  next()
-})
-app.use(express.json({ limit: '5mb' }))
-app.use(bodyParser.json({ limit: '5mb' }))
-
-app.get('/products', (req, res) => {
-  const { storeId } = req.query
-  const products = readData(productsFile)
-  const normalizedProducts = products.map(normalizeProduct)
-
-  if (!storeId) {
-    res.json(normalizedProducts)
-    return
-  }
-
-  res.json(normalizedProducts.filter((product) => String(product.storeId) === String(storeId)))
 })
 
-app.get('/product/:slug', (req, res) => {
-  const { slug } = req.params
-  const products = readData(productsFile)
-  const product = products.find((entry) => {
-    const seo = getDefaultProductSeo(entry)
-    return String(seo.slug) === String(slug) || String(entry.id) === String(slug)
-  })
+app.put('/products/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!product) {
-    res.status(404).json({ message: 'Product not found' })
-    return
+  try {
+    const update = {}
+    if (req.body.title !== undefined) update.title = req.body.title
+    if (req.body.description !== undefined) update.description = req.body.description
+    if (req.body.category !== undefined) update.category = req.body.category
+    if (req.body.price !== undefined) update.price = Number(req.body.price) || 0
+    if (req.body.discountedPrice !== undefined) update.discounted_price = Number(req.body.discountedPrice) || 0
+    if (req.body.quantity !== undefined) update.quantity = Number(req.body.quantity) || 0
+    if (req.body.lowStockThreshold !== undefined) update.low_stock_threshold = Number(req.body.lowStockThreshold) || 0
+    if (req.body.sku !== undefined) update.sku = req.body.sku
+    if (req.body.status !== undefined) update.status = req.body.status
+    if (req.body.image !== undefined || req.body.imageUrl !== undefined) update.image_url = req.body.image ?? req.body.imageUrl
+    if (req.body.galleryImage !== undefined) update.gallery_image = req.body.galleryImage
+    if (req.body.shipping !== undefined) update.shipping = req.body.shipping
+    if (req.body.seo !== undefined) update.seo = req.body.seo
+    if (req.body.limitSinglePurchase !== undefined) update.limit_single_purchase = Boolean(req.body.limitSinglePurchase)
+
+    const { data, error } = await supabase
+      .from('products')
+      .update(update)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) return res.status(500).json({ error })
+
+    res.json(toProduct(data))
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-
-  res.json({
-    ...normalizeProduct(product),
-  })
 })
 
-app.post('/products', (req, res) => {
-  if (!req.body.storeId) {
-    res.status(400).json({ message: 'storeId is required' })
-    return
-  }
+app.delete('/products/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  const products = readData(productsFile)
-  const productId = Date.now()
-  const newProduct = {
-    id: productId,
-    storeId: req.body.storeId,
-    title: req.body.title,
-    description: req.body.description ?? '',
-    category: req.body.category ?? '',
-    price: req.body.price,
-    discountedPrice: req.body.discountedPrice ?? 0,
-    status: req.body.status,
-    quantity: Number(req.body.quantity) || 0,
-    lowStockThreshold:
-      req.body.lowStockThreshold === undefined || req.body.lowStockThreshold === ''
-        ? defaultLowStockThreshold
-        : getLowStockThreshold(req.body.lowStockThreshold),
-    sku: req.body.sku ?? '',
-    image: req.body.image ?? '',
-    seo: {
-      title: req.body.seo?.title ?? '',
-      description: req.body.seo?.description ?? '',
-      slug: req.body.seo?.slug || String(productId),
-    },
-    createdAt: Date.now(),
-  }
-
-  products.push(newProduct)
-  writeData(productsFile, products)
-  res.status(201).json(newProduct)
-})
-
-app.put('/products/:id', (req, res) => {
-  const productId = Number(req.params.id)
-  const products = readData(productsFile)
-  const productIndex = products.findIndex((product) => product.id === productId)
-
-  if (productIndex === -1) {
-    res.status(404).json({ message: 'Product not found' })
-    return
-  }
-
-  products[productIndex] = {
-    ...products[productIndex],
-    ...req.body,
-    id: productId,
-    quantity:
-      req.body.quantity === undefined
-        ? Number(products[productIndex].quantity) || 0
-        : Number(req.body.quantity) || 0,
-    lowStockThreshold:
-      req.body.lowStockThreshold === undefined || req.body.lowStockThreshold === ''
-        ? getLowStockThreshold(products[productIndex].lowStockThreshold ?? defaultLowStockThreshold)
-        : getLowStockThreshold(req.body.lowStockThreshold),
-    seo: {
-      ...getDefaultProductSeo(products[productIndex]),
-      ...(req.body.seo ?? {}),
-      slug: req.body.seo?.slug || products[productIndex].seo?.slug || String(productId),
-    },
-  }
-
-  writeData(productsFile, products)
-  res.json(products[productIndex])
-})
-
-app.delete('/products/:id', (req, res) => {
-  const productId = Number(req.params.id)
-  const products = readData(productsFile)
-  const filteredProducts = products.filter((product) => product.id !== productId)
-
-  if (filteredProducts.length === products.length) {
-    res.status(404).json({ message: 'Product not found' })
-    return
-  }
-
-  writeData(productsFile, filteredProducts)
+  const { error } = await supabase.from('products').delete().eq('id', req.params.id)
+  if (error) return res.status(500).json({ error })
   res.json({ message: 'Product deleted successfully' })
 })
 
-app.post('/coupons', (req, res) => {
-  const {
-    storeId,
-    type,
-    value,
-    minOrderValue,
-    maxDiscount,
-    usageLimit,
-    expiresAt,
-    isActive = true,
-  } = req.body
-  const code = normalizeCouponCode(req.body.code)
+app.post('/coupons', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!storeId || !code || !type || !expiresAt) {
-    res.status(400).json({ message: 'storeId, code, type, and expiresAt are required' })
-    return
+  try {
+    const code = normalizeCouponCode(req.body.code)
+    if (!code) return res.status(400).json({ message: 'Coupon code is required' })
+    if (Number(req.body.value) <= 0) return res.status(400).json({ message: 'Coupon value must be greater than 0' })
+    if (req.body.type === 'percentage' && Number(req.body.value) > 100) {
+      return res.status(400).json({ message: 'Percentage coupon cannot exceed 100' })
+    }
+
+    const { data, error } = await supabase
+      .from('coupons')
+      .insert([
+        {
+          store_id: req.body.storeId ?? req.body.store_id,
+          code,
+          type: req.body.type,
+          value: Number(req.body.value),
+          min_order_value: Number(req.body.minOrderValue) || 0,
+          max_discount: req.body.maxDiscount ? Number(req.body.maxDiscount) : null,
+          usage_limit: req.body.usageLimit ? Number(req.body.usageLimit) : null,
+          expires_at: req.body.expiresAt || null,
+          is_active: req.body.isActive !== false,
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') return res.status(400).json({ message: 'Coupon code already exists' })
+      return res.status(500).json({ error })
+    }
+
+    res.status(201).json(toCoupon(data))
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-
-  if (!['percentage', 'fixed'].includes(type)) {
-    res.status(400).json({ message: 'Invalid coupon type' })
-    return
-  }
-
-  if (Number(value) <= 0 || (type === 'percentage' && Number(value) > 100)) {
-    res.status(400).json({ message: 'Invalid coupon value' })
-    return
-  }
-
-  if (Number(expiresAt) <= Date.now()) {
-    res.status(400).json({ message: 'Coupon expiry must be in the future' })
-    return
-  }
-
-  const coupons = readData(couponsFile)
-  const codeExists = coupons.some(
-    (coupon) =>
-      String(coupon.storeId) === String(storeId) && normalizeCouponCode(coupon.code) === code,
-  )
-
-  if (codeExists) {
-    res.status(409).json({ message: 'Coupon code already exists' })
-    return
-  }
-
-  const newCoupon = {
-    id: Date.now(),
-    storeId,
-    code,
-    type,
-    value: Number(value),
-    minOrderValue: minOrderValue ? Number(minOrderValue) : 0,
-    maxDiscount: maxDiscount ? Number(maxDiscount) : 0,
-    usageLimit: usageLimit ? Number(usageLimit) : 0,
-    usedCount: 0,
-    expiresAt: Number(expiresAt),
-    isActive: Boolean(isActive),
-    createdAt: Date.now(),
-  }
-
-  coupons.push(newCoupon)
-  writeData(couponsFile, coupons)
-  res.status(201).json(newCoupon)
 })
 
-app.get('/coupons', (req, res) => {
-  const { storeId } = req.query
-  const coupons = readData(couponsFile)
+app.get('/coupons', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!storeId) {
-    res.json(coupons)
-    return
-  }
-
-  res.json(coupons.filter((coupon) => String(coupon.storeId) === String(storeId)))
+  const storeId = req.query.storeId ?? req.query.store_id
+  let query = supabase.from('coupons').select('*').order('created_at', { ascending: false })
+  if (storeId) query = query.eq('store_id', storeId)
+  const { data, error } = await query
+  if (error) return res.status(500).json({ error })
+  res.json(data.map(toCoupon))
 })
 
-app.get('/coupons/:code', (req, res) => {
-  const { storeId, orderAmount = 0 } = req.query
+app.get('/coupons/:code', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!storeId) {
-    res.status(400).json({ message: 'storeId is required' })
-    return
+  try {
+    const validation = await validateCouponForOrder({
+      storeId: req.query.storeId ?? req.query.store_id,
+      code: req.params.code,
+      orderAmount: Number(req.query.orderAmount) || 0,
+    })
+
+    if (!validation.isValid) return res.status(400).json({ message: validation.message })
+
+    res.json({
+      coupon: toCoupon(validation.coupon),
+      discountAmount: validation.discountAmount,
+      finalAmount: validation.finalAmount,
+    })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-
-  const validation = validateCouponForOrder({
-    storeId,
-    code: req.params.code,
-    orderAmount: Number(orderAmount),
-  })
-
-  if (!validation.isValid) {
-    res.status(400).json({ message: validation.message })
-    return
-  }
-
-  res.json({
-    coupon: validation.coupon,
-    discountAmount: validation.discountAmount,
-    finalAmount: validation.finalAmount,
-  })
 })
 
-app.put('/coupons/:id', (req, res) => {
-  const couponId = Number(req.params.id)
-  const coupons = readData(couponsFile)
-  const couponIndex = coupons.findIndex((coupon) => coupon.id === couponId)
+app.put('/coupons/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (couponIndex === -1) {
-    res.status(404).json({ message: 'Coupon not found' })
-    return
-  }
+  const update = {}
+  if (req.body.code !== undefined) update.code = normalizeCouponCode(req.body.code)
+  if (req.body.type !== undefined) update.type = req.body.type
+  if (req.body.value !== undefined) update.value = Number(req.body.value)
+  if (req.body.minOrderValue !== undefined) update.min_order_value = Number(req.body.minOrderValue) || 0
+  if (req.body.maxDiscount !== undefined) update.max_discount = req.body.maxDiscount ? Number(req.body.maxDiscount) : null
+  if (req.body.usageLimit !== undefined) update.usage_limit = req.body.usageLimit ? Number(req.body.usageLimit) : null
+  if (req.body.expiresAt !== undefined) update.expires_at = req.body.expiresAt || null
+  if (req.body.isActive !== undefined) update.is_active = Boolean(req.body.isActive)
 
-  const nextCoupon = {
-    ...coupons[couponIndex],
-    ...req.body,
-    id: couponId,
-    code: req.body.code ? normalizeCouponCode(req.body.code) : coupons[couponIndex].code,
-  }
-
-  if (Number(nextCoupon.value) <= 0 || (nextCoupon.type === 'percentage' && Number(nextCoupon.value) > 100)) {
-    res.status(400).json({ message: 'Invalid coupon value' })
-    return
-  }
-
-  if (Number(nextCoupon.expiresAt) <= Date.now()) {
-    res.status(400).json({ message: 'Coupon expiry must be in the future' })
-    return
-  }
-
-  const codeExists = coupons.some(
-    (coupon) =>
-      coupon.id !== couponId &&
-      String(coupon.storeId) === String(nextCoupon.storeId) &&
-      normalizeCouponCode(coupon.code) === normalizeCouponCode(nextCoupon.code),
-  )
-
-  if (codeExists) {
-    res.status(409).json({ message: 'Coupon code already exists' })
-    return
-  }
-
-  coupons[couponIndex] = {
-    ...nextCoupon,
-    value: Number(nextCoupon.value),
-    minOrderValue: nextCoupon.minOrderValue ? Number(nextCoupon.minOrderValue) : 0,
-    maxDiscount: nextCoupon.maxDiscount ? Number(nextCoupon.maxDiscount) : 0,
-    usageLimit: nextCoupon.usageLimit ? Number(nextCoupon.usageLimit) : 0,
-    usedCount: Number(nextCoupon.usedCount || 0),
-    expiresAt: Number(nextCoupon.expiresAt),
-    isActive: Boolean(nextCoupon.isActive),
-  }
-
-  writeData(couponsFile, coupons)
-  res.json(coupons[couponIndex])
+  const { data, error } = await supabase.from('coupons').update(update).eq('id', req.params.id).select().single()
+  if (error) return res.status(500).json({ error })
+  res.json(toCoupon(data))
 })
 
-app.delete('/coupons/:id', (req, res) => {
-  const couponId = Number(req.params.id)
-  const coupons = readData(couponsFile)
-  const filteredCoupons = coupons.filter((coupon) => coupon.id !== couponId)
+app.delete('/coupons/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (filteredCoupons.length === coupons.length) {
-    res.status(404).json({ message: 'Coupon not found' })
-    return
-  }
-
-  writeData(couponsFile, filteredCoupons)
+  const { error } = await supabase.from('coupons').delete().eq('id', req.params.id)
+  if (error) return res.status(500).json({ error })
   res.json({ message: 'Coupon deleted successfully' })
 })
 
-app.get('/orders', (req, res) => {
-  const { storeId } = req.query
-  const orders = readData(ordersFile).map(normalizeOrder)
+app.get('/orders', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!storeId) {
-    res.json(orders)
-    return
-  }
-
-  res.json(orders.filter((order) => String(order.storeId) === String(storeId)))
+  const storeId = req.query.storeId ?? req.query.store_id
+  let query = supabase.from('orders').select('*').order('created_at', { ascending: false })
+  if (storeId) query = query.eq('store_id', storeId)
+  const { data, error } = await query
+  if (error) return res.status(500).json({ error })
+  res.json(data.map(toOrder))
 })
 
-app.get('/orders/:id', (req, res) => {
-  const orderId = Number(req.params.id)
-  const { storeId } = req.query
-  const orders = readData(ordersFile).map(normalizeOrder)
-  const order = orders.find(
-    (entry) =>
-      entry.id === orderId && (!storeId || String(entry.storeId) === String(storeId)),
-  )
+app.get('/orders/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!order) {
-    res.status(404).json({ message: 'Order not found' })
-    return
-  }
+  let query = supabase.from('orders').select('*').eq('id', req.params.id)
+  if (req.query.storeId ?? req.query.store_id) query = query.eq('store_id', req.query.storeId ?? req.query.store_id)
+  const { data: order, error } = await query.maybeSingle()
+  if (error) return res.status(500).json({ error })
+  if (!order) return res.status(404).json({ message: 'Order not found' })
 
-  const timeline = readData(orderTimelineFile).filter((entry) => entry.orderId === orderId)
+  const { data: timeline, error: timelineError } = await supabase
+    .from('order_timeline')
+    .select('*')
+    .eq('order_id', req.params.id)
+    .order('created_at')
+  if (timelineError) return res.status(500).json({ error: timelineError })
 
-  res.json({
-    ...order,
-    timeline,
-  })
+  res.json({ ...toOrder(order), timeline: timeline.map(toTimeline) })
 })
 
-app.post('/orders', (req, res) => {
-  if (!req.body.storeId) {
-    res.status(400).json({ message: 'storeId is required' })
-    return
-  }
+app.post('/orders', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  const orders = readData(ordersFile)
-  const orderId = Date.now()
-  const products = Array.isArray(req.body.products)
-    ? req.body.products
-    : [
-        {
-          productId: req.body.productId,
-          title: req.body.productTitle,
-          quantity: 1,
-          price: Number(req.body.price) || 0,
-        },
-      ].filter((product) => product.productId || product.title)
-  const totalAmount =
-    req.body.totalAmount ??
-    products.reduce(
-      (total, product) => total + (Number(product.price) || 0) * (Number(product.quantity) || 1),
-      0,
-    )
-  const couponCode = normalizeCouponCode(req.body.couponCode)
-  let discountAmount = 0
-  let finalAmount = Number(totalAmount) || 0
+  try {
+    const store = await getStoreById(req.body.storeId ?? req.body.store_id)
+    if (!store) return res.status(400).json({ message: 'storeId is required' })
 
-  if (couponCode) {
-    const couponValidation = validateCouponForOrder({
-      storeId: req.body.storeId,
-      code: couponCode,
-      orderAmount: totalAmount,
-    })
+    const products = Array.isArray(req.body.products) ? req.body.products : []
+    const subtotalAmount =
+      req.body.totalAmount ??
+      products.reduce((total, product) => total + (Number(product.price) || 0) * (Number(product.quantity) || 1), 0)
+    const couponCode = normalizeCouponCode(req.body.couponCode)
+    let discountAmount = 0
+    let finalAmount = Number(subtotalAmount) || 0
 
-    if (!couponValidation.isValid) {
-      res.status(400).json({ message: couponValidation.message })
-      return
-    }
-
-    discountAmount = couponValidation.discountAmount
-    finalAmount = couponValidation.finalAmount
-  }
-
-  const inventoryProducts = readData(productsFile)
-  const lowStockAlerts = []
-  let inventoryChanged = false
-
-  products.forEach((orderProduct) => {
-    const productIndex = inventoryProducts.findIndex(
-      (product) =>
-        String(product.id) === String(orderProduct.productId) &&
-        String(product.storeId) === String(req.body.storeId),
-    )
-
-    if (productIndex === -1) {
-      return
-    }
-
-    const currentProduct = normalizeProduct(inventoryProducts[productIndex])
-    const purchasedQuantity = Number(orderProduct.quantity) || 1
-    const nextQuantity = Math.max(0, currentProduct.quantity - purchasedQuantity)
-
-    inventoryProducts[productIndex] = {
-      ...inventoryProducts[productIndex],
-      quantity: nextQuantity,
-      lowStockThreshold: currentProduct.lowStockThreshold,
-    }
-    inventoryChanged = true
-
-    if (nextQuantity <= currentProduct.lowStockThreshold) {
-      lowStockAlerts.push({
-        productId: currentProduct.id,
-        productName: currentProduct.title,
-        quantity: nextQuantity,
-        lowStockThreshold: currentProduct.lowStockThreshold,
+    if (couponCode) {
+      const couponValidation = await validateCouponForOrder({
+        storeId: store.id,
+        code: couponCode,
+        orderAmount: subtotalAmount,
       })
+
+      if (!couponValidation.isValid) return res.status(400).json({ message: couponValidation.message })
+      discountAmount = couponValidation.discountAmount
+      finalAmount = couponValidation.finalAmount
     }
-  })
 
-  if (inventoryChanged) {
-    writeData(productsFile, inventoryProducts)
-  }
+    for (const orderProduct of products) {
+      if (!orderProduct.productId) continue
 
-  const newOrder = {
-    id: orderId,
-    storeId: req.body.storeId,
-    customerId: req.body.customerId ?? null,
-    customerName: req.body.customerName ?? '',
-    customerEmail: req.body.customerEmail ?? req.body.email ?? '',
-    phone: req.body.phone ?? '',
-    products,
-    subtotalAmount: totalAmount,
-    discountAmount,
-    finalAmount,
-    couponCode,
-    totalAmount: finalAmount,
-    paymentMethod: req.body.paymentMethod === 'online' ? 'online' : 'cod',
-    paymentStatus: req.body.paymentMethod === 'online' ? 'paid' : 'pending',
-    fulfillmentStatus: 'unfulfilled',
-    orderStatus: 'open',
-    shippingAddress: req.body.shippingAddress ?? req.body.address ?? '',
-    createdAt: Date.now(),
-    lowStockAlerts,
-  }
-  const customer = upsertCustomerForOrder(newOrder)
+      const { data: product } = await supabase
+        .from('products')
+        .select('quantity, low_stock_threshold')
+        .eq('id', orderProduct.productId)
+        .maybeSingle()
 
-  if (customer) {
-    newOrder.customerId = customer.id
-  }
-
-  orders.push(newOrder)
-  writeData(ordersFile, orders)
-
-  if (couponCode) {
-    const coupons = readData(couponsFile)
-    const couponIndex = coupons.findIndex(
-      (coupon) =>
-        String(coupon.storeId) === String(req.body.storeId) &&
-        normalizeCouponCode(coupon.code) === couponCode,
-    )
-
-    if (couponIndex !== -1) {
-      coupons[couponIndex] = {
-        ...coupons[couponIndex],
-        usedCount: Number(coupons[couponIndex].usedCount || 0) + 1,
+      if (product) {
+        await supabase
+          .from('products')
+          .update({ quantity: Math.max(0, Number(product.quantity || 0) - (Number(orderProduct.quantity) || 1)) })
+          .eq('id', orderProduct.productId)
       }
-      writeData(couponsFile, coupons)
     }
-  }
 
-  createOrderTimelineEntry(orderId, 'open', 'Order placed')
-  if (newOrder.paymentStatus === 'paid') {
-    createOrderTimelineEntry(orderId, 'paid', 'Payment received')
-  }
-  notifyNewOrder(newOrder)
-  res.status(201).json(newOrder)
-})
+    const firstProduct = products[0] ?? {}
+    const paymentMethod = req.body.paymentMethod === 'online' ? 'online' : 'cod'
+    const { data, error } = await supabase
+      .from('orders')
+      .insert([
+        {
+          owner_id: store.owner_id,
+          store_id: store.id,
+          customer_id: req.body.customerId || null,
+          customer_name: req.body.customerName ?? '',
+          customer_email: req.body.customerEmail ?? req.body.email ?? '',
+          phone: req.body.phone ?? '',
+          products,
+          product_id: firstProduct.productId || null,
+          product_title: firstProduct.title || 'Order',
+          price: Number(firstProduct.price) || Number(finalAmount) || 0,
+          subtotal_amount: Number(subtotalAmount) || 0,
+          discount_amount: discountAmount,
+          final_amount: finalAmount,
+          coupon_code: couponCode,
+          total_amount: finalAmount,
+          payment_method: paymentMethod,
+          payment_status: paymentMethod === 'online' ? 'paid' : 'pending',
+          fulfillment_status: 'unfulfilled',
+          order_status: 'open',
+          address: req.body.shippingAddress ?? req.body.address ?? '',
+          shipping_address: req.body.shippingAddress ?? req.body.address ?? '',
+          status: 'pending',
+        },
+      ])
+      .select()
+      .single()
 
-app.post('/orders/:id/pay', (req, res) => {
-  const orderId = Number(req.params.id)
-  const { method } = req.body
+    if (error) return res.status(500).json({ error })
 
-  if (!['cod', 'online'].includes(method)) {
-    res.status(400).json({ message: 'Invalid payment method' })
-    return
-  }
-
-  const orders = readData(ordersFile).map(normalizeOrder)
-  const orderIndex = orders.findIndex((order) => order.id === orderId)
-
-  if (orderIndex === -1) {
-    res.status(404).json({ message: 'Order not found' })
-    return
-  }
-
-  const nextPaymentStatus = method === 'online' ? 'paid' : 'pending'
-  orders[orderIndex] = {
-    ...orders[orderIndex],
-    paymentMethod: method,
-    paymentStatus: nextPaymentStatus,
-  }
-
-  writeData(ordersFile, orders)
-
-  if (nextPaymentStatus === 'paid') {
-    createOrderTimelineEntry(orderId, 'paid', 'Payment received')
-  }
-
-  res.json({
-    ...orders[orderIndex],
-    timeline: readData(orderTimelineFile).filter((entry) => entry.orderId === orderId),
-  })
-})
-
-app.patch('/orders/:id/status', (req, res) => {
-  const orderId = Number(req.params.id)
-  const orders = readData(ordersFile).map(normalizeOrder)
-  const orderIndex = orders.findIndex((order) => order.id === orderId)
-
-  if (orderIndex === -1) {
-    res.status(404).json({ message: 'Order not found' })
-    return
-  }
-
-  const allowedStatusFields = ['paymentStatus', 'fulfillmentStatus', 'orderStatus']
-  const updates = {}
-  const timelineEntries = []
-
-  allowedStatusFields.forEach((field) => {
-    if (req.body[field] && req.body[field] !== orders[orderIndex][field]) {
-      updates[field] = req.body[field]
-      timelineEntries.push(
-        createOrderTimelineEntry(orderId, req.body[field], getStatusTimelineMessage(req.body[field])),
-      )
+    const order = toOrder(data)
+    const customer = await upsertCustomerForOrder(order)
+    if (customer) {
+      await supabase.from('orders').update({ customer_id: customer.id }).eq('id', order.id)
+      order.customerId = customer.id
     }
-  })
 
-  orders[orderIndex] = {
-    ...orders[orderIndex],
-    ...updates,
+    if (couponCode) {
+      const { data: coupon } = await supabase
+        .from('coupons')
+        .select('used_count')
+        .eq('store_id', store.id)
+        .eq('code', couponCode)
+        .maybeSingle()
+
+      if (coupon) {
+        await supabase
+          .from('coupons')
+          .update({ used_count: Number(coupon.used_count || 0) + 1 })
+          .eq('store_id', store.id)
+          .eq('code', couponCode)
+      }
+    }
+
+    await createOrderTimelineEntry(order.id, 'open', 'Order placed')
+    if (order.paymentStatus === 'paid') await createOrderTimelineEntry(order.id, 'paid', 'Payment received')
+    notifyNewOrder(order)
+    res.status(201).json(order)
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-
-  writeData(ordersFile, orders)
-  res.json({
-    ...orders[orderIndex],
-    timeline: readData(orderTimelineFile).filter((entry) => entry.orderId === orderId),
-    addedTimelineEntries: timelineEntries,
-  })
 })
 
-app.get('/customers', (req, res) => {
-  const { storeId } = req.query
-  const customers = readData(customersFile)
+app.post('/orders/:id/pay', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!storeId) {
-    res.json(customers)
-    return
-  }
-
-  res.json(customers.filter((customer) => String(customer.storeId) === String(storeId)))
+  if (!['cod', 'online'].includes(req.body.method)) return res.status(400).json({ message: 'Invalid payment method' })
+  const paymentStatus = req.body.method === 'online' ? 'paid' : 'pending'
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ payment_method: req.body.method, payment_status: paymentStatus })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) return res.status(500).json({ error })
+  if (paymentStatus === 'paid') await createOrderTimelineEntry(req.params.id, 'paid', 'Payment received')
+  const { data: timeline } = await supabase.from('order_timeline').select('*').eq('order_id', req.params.id).order('created_at')
+  res.json({ ...toOrder(data), timeline: (timeline ?? []).map(toTimeline) })
 })
 
-app.post('/customers', (req, res) => {
-  if (!req.body.storeId) {
-    res.status(400).json({ message: 'storeId is required' })
-    return
+app.patch('/orders/:id/status', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const update = {}
+  if (req.body.paymentStatus) update.payment_status = req.body.paymentStatus
+  if (req.body.fulfillmentStatus) update.fulfillment_status = req.body.fulfillmentStatus
+  if (req.body.orderStatus) update.order_status = req.body.orderStatus
+
+  const { data, error } = await supabase.from('orders').update(update).eq('id', req.params.id).select().single()
+  if (error) return res.status(500).json({ error })
+
+  for (const status of Object.values(req.body)) {
+    await createOrderTimelineEntry(req.params.id, status, `Status updated to ${status}`)
   }
 
-  const customers = readData(customersFile)
-  const newCustomer = {
-    id: Date.now(),
-    storeId: req.body.storeId,
-    name: req.body.name ?? '',
-    email: String(req.body.email ?? '').trim().toLowerCase(),
-    phone: req.body.phone ?? '',
-    totalOrders: Number(req.body.totalOrders) || 0,
-    totalSpent: Number(req.body.totalSpent) || 0,
-    createdAt: Date.now(),
-  }
-
-  customers.push(newCustomer)
-  writeData(customersFile, customers)
-  res.status(201).json(newCustomer)
+  const { data: timeline } = await supabase.from('order_timeline').select('*').eq('order_id', req.params.id).order('created_at')
+  res.json({ ...toOrder(data), timeline: (timeline ?? []).map(toTimeline) })
 })
 
-app.get('/customers/:id', (req, res) => {
-  const customerId = Number(req.params.id)
-  const { storeId } = req.query
-  const customers = readData(customersFile)
-  const customer = customers.find(
-    (entry) =>
-      entry.id === customerId && (!storeId || String(entry.storeId) === String(storeId)),
-  )
+app.get('/customers', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!customer) {
-    res.status(404).json({ message: 'Customer not found' })
-    return
-  }
-
-  const orders = readData(ordersFile)
-    .map(normalizeOrder)
-    .filter(
-      (order) =>
-        String(order.storeId) === String(customer.storeId) &&
-        (String(order.customerId) === String(customer.id) ||
-          String(order.customerEmail ?? '').trim().toLowerCase() ===
-            String(customer.email).trim().toLowerCase()),
-    )
-
-  res.json({
-    ...customer,
-    orders,
-  })
+  const storeId = req.query.storeId ?? req.query.store_id
+  let query = supabase.from('customers').select('*').order('created_at', { ascending: false })
+  if (storeId) query = query.eq('store_id', storeId)
+  const { data, error } = await query
+  if (error) return res.status(500).json({ error })
+  res.json(data.map(toCustomer))
 })
 
-app.delete('/customers/:id', (req, res) => {
-  const customerId = Number(req.params.id)
-  const customers = readData(customersFile)
-  const filteredCustomers = customers.filter((customer) => customer.id !== customerId)
+app.post('/customers', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (filteredCustomers.length === customers.length) {
-    res.status(404).json({ message: 'Customer not found' })
-    return
-  }
+  const { data, error } = await supabase
+    .from('customers')
+    .insert([
+      {
+        store_id: req.body.storeId ?? req.body.store_id,
+        name: req.body.name ?? '',
+        email: req.body.email ?? '',
+        phone: req.body.phone ?? '',
+        total_orders: Number(req.body.totalOrders) || 0,
+        total_spent: Number(req.body.totalSpent) || 0,
+      },
+    ])
+    .select()
+    .single()
+  if (error) return res.status(500).json({ error })
+  res.status(201).json(toCustomer(data))
+})
 
-  writeData(customersFile, filteredCustomers)
+app.get('/customers/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  let query = supabase.from('customers').select('*').eq('id', req.params.id)
+  if (req.query.storeId ?? req.query.store_id) query = query.eq('store_id', req.query.storeId ?? req.query.store_id)
+  const { data: customer, error } = await query.maybeSingle()
+  if (error) return res.status(500).json({ error })
+  if (!customer) return res.status(404).json({ message: 'Customer not found' })
+  const { data: orders, error: ordersError } = await supabase.from('orders').select('*').eq('store_id', customer.store_id).eq('customer_id', customer.id)
+  if (ordersError) return res.status(500).json({ error: ordersError })
+  res.json({ ...toCustomer(customer), orders: orders.map(toOrder) })
+})
+
+app.delete('/customers/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { error } = await supabase.from('customers').delete().eq('id', req.params.id)
+  if (error) return res.status(500).json({ error })
   res.json({ message: 'Customer deleted successfully' })
 })
 
-app.get('/stores', (req, res) => {
-  const stores = readData(storesFile)
-  res.json(stores)
+app.get('/stores', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const { data, error } = await supabase.from('stores').select('*').order('created_at', { ascending: false })
+  if (error) return res.status(500).json({ error })
+  res.json(data.map(toStore))
 })
 
-app.post('/stores', (req, res) => {
-  const { userId, name, url } = req.body
+app.post('/stores', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (!userId) {
-    res.status(400).json({ message: 'userId is required' })
-    return
+  try {
+    const ownerId = req.body.owner_id ?? req.body.userId
+    if (!ownerId) return res.status(400).json({ message: 'userId is required' })
+
+    const slug = normalizeStoreSlug(req.body.slug ?? req.body.url ?? req.body.name) || getDraftSlug()
+    const subdomain = req.body.subdomain || normalizeStoreUrl(slug)
+
+    const { data, error } = await supabase
+      .from('stores')
+      .insert([
+        {
+          owner_id: ownerId,
+          name: req.body.name ?? '',
+          slug,
+          subdomain,
+          address1: req.body.address1 ?? '',
+          address2: req.body.address2 ?? '',
+          logo_url: req.body.logoUrl ?? '',
+          owner_email: req.body.ownerEmail ?? '',
+          theme_id: req.body.themeId ?? 'minimal',
+          theme_config: getThemeConfig(req.body.themeConfig),
+          onboarding_step: Number(req.body.onboardingStep) || 1,
+          is_onboarding_completed: Boolean(req.body.isOnboardingCompleted),
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
+      return res.status(500).json({ error })
+    }
+
+    res.status(201).json(toStore(data))
+  } catch (error) {
+    res.status(500).json({ message: error.message })
   }
-
-  const stores = readData(storesFile)
-  const normalizedUrl = normalizeStoreUrl(url)
-
-  if (isStoreUrlTaken(stores, normalizedUrl)) {
-    res.status(400).json({ message: 'Store Temporary URL already used' })
-    return
-  }
-
-  const newStore = {
-    id: Date.now(),
-    userId,
-    name: name ?? '',
-    url: normalizedUrl,
-    ownerEmail: req.body.ownerEmail ?? '',
-    themeId: 'minimal',
-    themeConfig: defaultThemeConfig,
-    onboardingStep: Number(req.body.onboardingStep) || 1,
-    isOnboardingCompleted: Boolean(req.body.isOnboardingCompleted),
-  }
-
-  stores.push(newStore)
-  writeData(storesFile, stores)
-  res.status(201).json(newStore)
 })
 
-app.put('/stores/:id', (req, res) => {
-  const storeId = Number(req.params.id)
-  const stores = readData(storesFile)
-  const storeIndex = stores.findIndex((store) => store.id === storeId)
+app.put('/stores/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (storeIndex === -1) {
-    res.status(404).json({ message: 'Store not found' })
-    return
+  const update = {}
+  if (req.body.name !== undefined) update.name = req.body.name
+  if (req.body.url !== undefined || req.body.slug !== undefined) {
+    const slug = normalizeStoreSlug(req.body.slug ?? req.body.url)
+    if (slug) {
+      update.slug = slug
+      update.subdomain = req.body.subdomain || normalizeStoreUrl(slug)
+    }
   }
+  if (req.body.ownerEmail !== undefined) update.owner_email = req.body.ownerEmail
+  if (req.body.themeId !== undefined) update.theme_id = req.body.themeId
+  if (req.body.themeConfig !== undefined) update.theme_config = getThemeConfig(req.body.themeConfig)
+  if (req.body.onboardingStep !== undefined) update.onboarding_step = Number(req.body.onboardingStep) || 1
+  if (req.body.isOnboardingCompleted !== undefined) update.is_onboarding_completed = Boolean(req.body.isOnboardingCompleted)
+  if (req.body.logoUrl !== undefined) update.logo_url = req.body.logoUrl
 
-  const nextUrl = req.body.url ? normalizeStoreUrl(req.body.url) : null
-
-  if (nextUrl && isStoreUrlTaken(stores, nextUrl, storeId)) {
-    res.status(400).json({ message: 'Store Temporary URL already used' })
-    return
+  const { data, error } = await supabase.from('stores').update(update).eq('id', req.params.id).select().single()
+  if (error) {
+    if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
+    return res.status(500).json({ error })
   }
-
-  stores[storeIndex] = {
-    ...stores[storeIndex],
-    ...req.body,
-    id: storeId,
-    ...(nextUrl ? { url: nextUrl } : {}),
-  }
-
-  writeData(storesFile, stores)
-  res.json(stores[storeIndex])
+  res.json(toStore(data))
 })
 
-app.delete('/stores/:id', (req, res) => {
-  const storeId = Number(req.params.id)
-  const stores = readData(storesFile)
-  const filteredStores = stores.filter((store) => store.id !== storeId)
-
-  if (filteredStores.length === stores.length) {
-    res.status(404).json({ message: 'Store not found' })
-    return
-  }
-
-  writeData(storesFile, filteredStores)
+app.delete('/stores/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { error } = await supabase.from('stores').delete().eq('id', req.params.id)
+  if (error) return res.status(500).json({ error })
   res.json({ message: 'Store deleted successfully' })
 })
 
-app.put('/stores/:id/theme', (req, res) => {
-  const storeId = Number(req.params.id)
-  const { themeId } = req.body
-  const stores = readData(storesFile)
-  const storeIndex = stores.findIndex((store) => store.id === storeId)
+app.put('/stores/:id/theme', async (req, res) => {
+  if (!requireSupabase(res)) return
 
-  if (storeIndex === -1) {
-    res.status(404).json({ message: 'Store not found' })
-    return
+  if (!themes.some((theme) => theme.id === req.body.themeId)) {
+    return res.status(400).json({ message: 'Invalid themeId' })
   }
 
-  if (!themeId) {
-    res.status(400).json({ message: 'themeId is required' })
-    return
-  }
-
-  const themeExists = themes.some((theme) => theme.id === themeId)
-
-  if (!themeExists) {
-    res.status(400).json({ message: 'Invalid themeId' })
-    return
-  }
-
-  stores[storeIndex] = {
-    ...stores[storeIndex],
-    themeId,
-  }
-
-  writeData(storesFile, stores)
-  res.json(stores[storeIndex])
+  const { data, error } = await supabase.from('stores').update({ theme_id: req.body.themeId }).eq('id', req.params.id).select().single()
+  if (error) return res.status(500).json({ error })
+  res.json(toStore(data))
 })
 
-app.put('/stores/:id/theme-config', (req, res) => {
-  const storeId = Number(req.params.id)
-  const { themeConfig } = req.body
-  const stores = readData(storesFile)
-  const storeIndex = stores.findIndex((store) => store.id === storeId)
-
-  if (storeIndex === -1) {
-    res.status(404).json({ message: 'Store not found' })
-    return
-  }
-
-  if (!themeConfig || typeof themeConfig !== 'object') {
-    res.status(400).json({ message: 'themeConfig is required' })
-    return
-  }
-
-  stores[storeIndex] = {
-    ...stores[storeIndex],
-    themeConfig: {
-      ...defaultThemeConfig,
-      ...(stores[storeIndex].themeConfig ?? {}),
-      ...themeConfig,
-    },
-  }
-
-  writeData(storesFile, stores)
-  res.json(stores[storeIndex])
+app.put('/stores/:id/theme-config', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { data, error } = await supabase
+    .from('stores')
+    .update({ theme_config: getThemeConfig(req.body.themeConfig) })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) return res.status(500).json({ error })
+  res.json(toStore(data))
 })
 
-app.get('/stores/:userId', (req, res) => {
-  const { userId } = req.params
-  const stores = readData(storesFile)
-  const userStores = stores.filter((store) => String(store.userId) === String(userId))
-
-  res.json(userStores)
+app.get('/stores/:userId', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { data, error } = await supabase.from('stores').select('*').eq('owner_id', req.params.userId).order('created_at', { ascending: false })
+  if (error) return res.status(500).json({ error })
+  res.json(data.map(toStore))
 })
 
 app.get('/themes', (req, res) => {
@@ -1215,48 +1062,21 @@ app.get('/themes', (req, res) => {
 
 console.log('Route /store/check-slug loaded')
 app.get('/store/check-slug', async (req, res) => {
+  if (!requireSupabase(res)) return
+
   try {
     let { slug } = req.query
-    const { excludeStoreId } = req.query
+    if (!slug || typeof slug !== 'string') return res.status(400).json({ available: false, error: 'Invalid slug' })
+    slug = normalizeStoreSlug(slug)
+    if (!slug) return res.status(400).json({ available: false, error: 'Invalid slug' })
 
-    if (!slug || typeof slug !== 'string') {
-      return res.status(400).json({ available: false, error: 'Invalid slug' })
-    }
-
-    slug = slug.toLowerCase().trim()
-    const normalizedSlug = normalizeStoreSlug(slug)
-
-    if (!normalizedSlug) {
-      return res.status(400).json({ available: false, error: 'Invalid slug' })
-    }
-
-    if (supabaseAdmin) {
-      let query = supabaseAdmin
-        .from('stores')
-        .select('id')
-        .eq('slug', normalizedSlug)
-
-      if (excludeStoreId) {
-        query = query.neq('id', excludeStoreId)
-      }
-
-      const { data, error } = await query.maybeSingle()
-
-      if (error) {
-        return res.status(500).json({ available: false, error: 'Error checking slug' })
-      }
-
-      return res.json({ available: !data })
-    }
-
-    const stores = readData(storesFile)
-    const normalizedUrl = normalizeStoreUrl(normalizedSlug)
-
-    return res.json({
-      available: !isStoreUrlTaken(stores, normalizedUrl, excludeStoreId),
-    })
-  } catch (err) {
-    return res.status(500).json({ available: false, error: 'Server error' })
+    let query = supabase.from('stores').select('id').eq('slug', slug)
+    if (req.query.excludeStoreId) query = query.neq('id', req.query.excludeStoreId)
+    const { data, error } = await query.maybeSingle()
+    if (error) return res.status(500).json({ available: false, error: 'Error checking slug' })
+    res.json({ available: !data })
+  } catch {
+    res.status(500).json({ available: false, error: 'Server error' })
   }
 })
 
@@ -1264,177 +1084,94 @@ app.get('/apps', (req, res) => {
   res.json(apps)
 })
 
-app.get('/store-apps/:storeId', (req, res) => {
-  const { storeId } = req.params
-  const storeApps = readData(storeAppsFile)
-
-  const installedApps = storeApps
-    .filter((storeApp) => String(storeApp.storeId) === String(storeId))
-    .map((storeApp) => ({
-      ...storeApp,
-      app: apps.find((availableApp) => availableApp.id === storeApp.appId) ?? null,
-    }))
-
-  res.json(installedApps)
-})
-
-app.post('/store-apps/install', (req, res) => {
-  const { storeId, appId } = req.body
-
-  if (!storeId || !appId) {
-    res.status(400).json({ message: 'storeId and appId are required' })
-    return
-  }
-
-  const appExists = apps.some((availableApp) => availableApp.id === appId && availableApp.isActive)
-
-  if (!appExists) {
-    res.status(400).json({ message: 'Invalid appId' })
-    return
-  }
-
-  const storeApps = readData(storeAppsFile)
-  const existingAppIndex = storeApps.findIndex(
-    (storeApp) => String(storeApp.storeId) === String(storeId) && storeApp.appId === appId,
-  )
-
-  if (existingAppIndex !== -1) {
-    storeApps[existingAppIndex] = {
-      ...storeApps[existingAppIndex],
-      enabled: true,
-    }
-
-    writeData(storeAppsFile, storeApps)
-    res.json({
-      ...storeApps[existingAppIndex],
-      app: apps.find((availableApp) => availableApp.id === appId) ?? null,
-    })
-    return
-  }
-
-  const newStoreApp = {
-    id: Date.now(),
-    storeId,
-    appId,
-    enabled: true,
-  }
-
-  storeApps.push(newStoreApp)
-  writeData(storeAppsFile, storeApps)
-  res.status(201).json({
-    ...newStoreApp,
-    app: apps.find((availableApp) => availableApp.id === appId) ?? null,
-  })
-})
-
-app.post('/store-apps/toggle', (req, res) => {
-  const { storeId, appId, enabled } = req.body
-
-  if (!storeId || !appId || typeof enabled !== 'boolean') {
-    res.status(400).json({ message: 'storeId, appId, and enabled are required' })
-    return
-  }
-
-  const storeApps = readData(storeAppsFile)
-  const storeAppIndex = storeApps.findIndex(
-    (storeApp) => String(storeApp.storeId) === String(storeId) && storeApp.appId === appId,
-  )
-
-  if (storeAppIndex === -1) {
-    res.status(404).json({ message: 'Store app not found' })
-    return
-  }
-
-  storeApps[storeAppIndex] = {
-    ...storeApps[storeAppIndex],
-    enabled,
-  }
-
-  writeData(storeAppsFile, storeApps)
-  res.json({
-    ...storeApps[storeAppIndex],
-    app: apps.find((availableApp) => availableApp.id === appId) ?? null,
-  })
-})
-
-app.get('/store-by-url/:url', (req, res) => {
-  const requestedUrl = normalizeStoreUrl(req.params.url)
-  const stores = readData(storesFile)
-  const store = stores.find(
-    (entry) => normalizeStoreUrl(entry.url) === requestedUrl,
-  )
-
-  if (!store) {
-    res.status(404).json({ message: 'Store not found' })
-    return
-  }
-
-  res.json(store)
-})
-
-app.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      return res.status(401).json({ message: error.message })
-    }
-
-    return res.json({
-      message: 'Login successful',
-      user: data.user,
-      session: data.session,
-    })
-  } catch (err) {
-    return res.status(500).json({ message: err.message })
-  }
-})
-
-app.get('/users', (req, res) => {
-  const users = readData(usersFile)
-
+app.get('/store-apps/:storeId', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { data, error } = await supabase.from('store_apps').select('*').eq('store_id', req.params.storeId)
+  if (error) return res.status(500).json({ error })
   res.json(
-    users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      isVerified: user.isVerified,
+    data.map((storeApp) => ({
+      id: storeApp.id,
+      storeId: storeApp.store_id,
+      appId: storeApp.app_id,
+      enabled: storeApp.enabled,
+      app: apps.find((availableApp) => availableApp.id === storeApp.app_id) ?? null,
     })),
   )
 })
 
+app.post('/store-apps/install', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { storeId, appId } = req.body
+  if (!storeId || !appId) return res.status(400).json({ message: 'storeId and appId are required' })
+  if (!apps.some((app) => app.id === appId && app.isActive)) return res.status(400).json({ message: 'Invalid appId' })
+
+  const { data, error } = await supabase
+    .from('store_apps')
+    .upsert([{ store_id: storeId, app_id: appId, enabled: true }], { onConflict: 'store_id,app_id' })
+    .select()
+    .single()
+  if (error) return res.status(500).json({ error })
+  res.status(201).json({
+    id: data.id,
+    storeId: data.store_id,
+    appId: data.app_id,
+    enabled: data.enabled,
+    app: apps.find((app) => app.id === data.app_id) ?? null,
+  })
+})
+
+app.post('/store-apps/toggle', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { storeId, appId, enabled } = req.body
+  if (!storeId || !appId || typeof enabled !== 'boolean') return res.status(400).json({ message: 'storeId, appId, and enabled are required' })
+  const { data, error } = await supabase
+    .from('store_apps')
+    .update({ enabled })
+    .eq('store_id', storeId)
+    .eq('app_id', appId)
+    .select()
+    .single()
+  if (error) return res.status(500).json({ error })
+  res.json({
+    id: data.id,
+    storeId: data.store_id,
+    appId: data.app_id,
+    enabled: data.enabled,
+    app: apps.find((app) => app.id === data.app_id) ?? null,
+  })
+})
+
+app.get('/store-by-url/:url', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const slug = normalizeStoreSlug(req.params.url)
+  const { data, error } = await supabase.from('stores').select('*').eq('slug', slug).maybeSingle()
+  if (error) return res.status(500).json({ error })
+  if (!data) return res.status(404).json({ message: 'Store not found' })
+  res.json(toStore(data))
+})
+
+app.post('/login', async (req, res) => {
+  if (!requireSupabase(res)) return
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: req.body.email,
+      password: req.body.password,
+    })
+    if (error) return res.status(401).json({ message: error.message })
+    res.json({ message: 'Login successful', user: data.user, session: data.session })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+})
+
+app.get('/users', async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { data, error } = await supabase.auth.admin.listUsers()
+  if (error) return res.status(500).json({ error })
+  res.json(data.users.map((user) => ({ id: user.id, email: user.email, isVerified: Boolean(user.email_confirmed_at) })))
+})
+
 app.get('/verify', (req, res) => {
-  const token = req.query.token
-
-  if (!token) {
-    res.status(400).json({ message: 'Verification token is required' })
-    return
-  }
-
-  const users = readData(usersFile)
-  const userIndex = users.findIndex((entry) => entry.verificationToken === token)
-
-  if (userIndex === -1) {
-    res.status(404).json({ message: 'Invalid verification token' })
-    return
-  }
-
-  if (Date.now() > users[userIndex].tokenExpiry) {
-    res.status(400).json({ message: 'Verification token has expired' })
-    return
-  }
-
-  users[userIndex] = {
-    ...users[userIndex],
-    isVerified: true,
-    verificationToken: null,
-  }
-
-  writeData(usersFile, users)
   res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?verified=true`)
 })
 
