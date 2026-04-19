@@ -100,6 +100,7 @@ function App() {
       <ApiProgressBar />
 
       <Routes>
+      <Route path="/" element={<Navigate to="/login" />} />
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
