@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'
 const API_ACTIVITY_EVENT = 'projectx:api-activity'
 let activeRequestCount = 0
 
@@ -208,6 +208,16 @@ export function updateStore(storeId, data) {
 
 export function getStoresByUserId(userId) {
   return request(`/stores/${userId}`)
+}
+
+export function checkStoreSlug(slug, excludeStoreId) {
+  const params = new URLSearchParams({ slug })
+
+  if (excludeStoreId) {
+    params.set('excludeStoreId', String(excludeStoreId))
+  }
+
+  return request(`/store/check-slug?${params.toString()}`)
 }
 
 export function getStoreByUrl(url) {

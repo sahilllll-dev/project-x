@@ -5,6 +5,7 @@ const cors = require('cors')
 const bodyParser = require('body-parser')
 const nodemailer = require('nodemailer')
 const { createClient } = require('@supabase/supabase-js')
+const { getSupabaseAdmin, isSupabaseAdminConfigured } = require('./supabaseAdmin')
 const { readData, writeData } = require('./utils/fileDb')
 
 function loadLocalEnv() {
@@ -41,6 +42,7 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
 )
+const supabaseAdmin = isSupabaseAdminConfigured ? getSupabaseAdmin() : null
 
 const productsFile = path.join(__dirname, 'data', 'products.json')
 const ordersFile = path.join(__dirname, 'data', 'orders.json')
@@ -288,6 +290,35 @@ function createOrderTimelineEntry(orderId, status, message) {
 
 function normalizeCouponCode(code) {
   return String(code ?? '').trim().toUpperCase()
+}
+
+function normalizeStoreSlug(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.projectx\.com$/i, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function normalizeStoreUrl(value) {
+  const slug = normalizeStoreSlug(value)
+
+  return slug ? `${slug}.projectx.com` : ''
+}
+
+function isStoreUrlTaken(stores, url, excludeStoreId = null) {
+  const normalizedUrl = normalizeStoreUrl(url)
+
+  if (!normalizedUrl) {
+    return false
+  }
+
+  return stores.some(
+    (store) =>
+      String(store.id) !== String(excludeStoreId) &&
+      normalizeStoreUrl(store.url) === normalizedUrl,
+  )
 }
 
 function calculateCouponDiscount(coupon, orderAmount) {
@@ -1038,13 +1069,10 @@ app.post('/stores', (req, res) => {
   }
 
   const stores = readData(storesFile)
-  const normalizedUrl = String(url ?? '').trim().toLowerCase()
+  const normalizedUrl = normalizeStoreUrl(url)
 
-  if (
-    normalizedUrl &&
-    stores.some((store) => String(store.url || '').trim().toLowerCase() === normalizedUrl)
-  ) {
-    res.status(409).json({ message: 'Store URL is already taken' })
+  if (isStoreUrlTaken(stores, normalizedUrl)) {
+    res.status(400).json({ message: 'Store Temporary URL already used' })
     return
   }
 
@@ -1075,17 +1103,10 @@ app.put('/stores/:id', (req, res) => {
     return
   }
 
-  const nextUrl = req.body.url ? String(req.body.url).trim().toLowerCase() : null
+  const nextUrl = req.body.url ? normalizeStoreUrl(req.body.url) : null
 
-  if (
-    nextUrl &&
-    stores.some(
-      (store) =>
-        store.id !== storeId &&
-        String(store.url || '').trim().toLowerCase() === nextUrl,
-    )
-  ) {
-    res.status(409).json({ message: 'Store URL is already taken' })
+  if (nextUrl && isStoreUrlTaken(stores, nextUrl, storeId)) {
+    res.status(400).json({ message: 'Store Temporary URL already used' })
     return
   }
 
@@ -1171,6 +1192,51 @@ app.get('/stores/:userId', (req, res) => {
 
 app.get('/themes', (req, res) => {
   res.json(themes)
+})
+
+console.log('Route /store/check-slug loaded')
+app.get('/store/check-slug', async (req, res) => {
+  try {
+    const { slug, excludeStoreId } = req.query
+
+    if (!slug) {
+      return res.status(400).json({ message: 'Slug is required' })
+    }
+
+    const normalizedSlug = normalizeStoreSlug(slug)
+
+    if (!normalizedSlug) {
+      return res.status(400).json({ message: 'Slug is required' })
+    }
+
+    if (supabaseAdmin) {
+      let query = supabaseAdmin
+        .from('stores')
+        .select('id')
+        .eq('slug', normalizedSlug)
+
+      if (excludeStoreId) {
+        query = query.neq('id', excludeStoreId)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        return res.status(500).json({ message: 'Error checking slug' })
+      }
+
+      return res.json({ available: data.length === 0 })
+    }
+
+    const stores = readData(storesFile)
+    const normalizedUrl = normalizeStoreUrl(normalizedSlug)
+
+    return res.json({
+      available: !isStoreUrlTaken(stores, normalizedUrl, excludeStoreId),
+    })
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error' })
+  }
 })
 
 app.get('/apps', (req, res) => {
@@ -1271,10 +1337,10 @@ app.post('/store-apps/toggle', (req, res) => {
 })
 
 app.get('/store-by-url/:url', (req, res) => {
-  const requestedUrl = String(req.params.url || '').trim().toLowerCase()
+  const requestedUrl = normalizeStoreUrl(req.params.url)
   const stores = readData(storesFile)
   const store = stores.find(
-    (entry) => String(entry.url || '').trim().toLowerCase() === requestedUrl,
+    (entry) => normalizeStoreUrl(entry.url) === requestedUrl,
   )
 
   if (!store) {

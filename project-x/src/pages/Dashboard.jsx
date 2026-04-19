@@ -4,12 +4,17 @@ import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { createStore, getProducts, getStoresByUserId, updateStore } from '../utils/api.js'
+import { checkStoreSlug, createStore, getProducts, updateStore } from '../utils/api.js'
 
 const setupSteps = ['Store Settings', 'Add Products', 'Sell Online']
 
 function slugifyStoreName(value) {
-  return value.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '')
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\.projectx\.com$/i, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function getStoreUrlSlug(value) {
@@ -53,6 +58,7 @@ function Dashboard() {
   const [storeUrl, setStoreUrl] = useState('')
   const [isStoreUrlEdited, setIsStoreUrlEdited] = useState(false)
   const [isUrlAvailable, setIsUrlAvailable] = useState(null)
+  const [storeUrlError, setStoreUrlError] = useState('')
   const [isFormValid, setIsFormValid] = useState(false)
   const [logoPreview, setLogoPreview] = useState('')
   const [isStoreCreated, setIsStoreCreated] = useState(false)
@@ -87,6 +93,7 @@ function Dashboard() {
       setStoreUrl('')
       setIsStoreUrlEdited(false)
       setIsUrlAvailable(null)
+      setStoreUrlError('')
       setIsFormValid(false)
       setIsStoreCreated(false)
       setHasProducts(false)
@@ -186,46 +193,48 @@ function Dashboard() {
 
     if (!storeUrl.trim()) {
       setIsUrlAvailable(null)
+      setStoreUrlError('')
       return
     }
 
     async function checkStoreAvailability() {
-      if (!currentUser?.id) {
-        setIsUrlAvailable(null)
-        return
-      }
-
       try {
-        const normalizedUrl = storeUrl.trim().toLowerCase()
+        const normalizedSlug = getStoreUrlSlug(storeUrl)
 
-        if (currentStore?.id && normalizedUrl === String(currentStore.url ?? '').toLowerCase()) {
+        if (
+          currentStore?.id &&
+          normalizedSlug === getStoreUrlSlug(currentStore.url ?? '')
+        ) {
           setIsUrlAvailable(true)
+          setStoreUrlError('')
           return
         }
 
-        const stores = await getStoresByUserId(currentUser.id)
-        const urlExists = stores.some(
-          (store) =>
-            store.url?.toLowerCase() === normalizedUrl &&
-            String(store.id) !== String(currentStore?.id),
-        )
-        setIsUrlAvailable(!urlExists)
-        if (urlExists && lastTakenUrlToastRef.current !== normalizedUrl) {
-          showToast('Store URL is already taken', 'error')
-          lastTakenUrlToastRef.current = normalizedUrl
+        const response = await checkStoreSlug(normalizedSlug, currentStore?.id)
+        setIsUrlAvailable(response.available)
+        setStoreUrlError(response.available ? '' : 'Store Temporary URL already used')
+
+        if (!response.available && lastTakenUrlToastRef.current !== normalizedSlug) {
+          showToast('Store Temporary URL already used', 'error')
+          lastTakenUrlToastRef.current = normalizedSlug
         }
-        if (!urlExists && lastTakenUrlToastRef.current === normalizedUrl) {
+        if (response.available && lastTakenUrlToastRef.current === normalizedSlug) {
           lastTakenUrlToastRef.current = ''
         }
       } catch (error) {
         console.error(error)
         setIsUrlAvailable(false)
+        setStoreUrlError('Unable to verify Store Temporary URL')
         showToast('Something went wrong, please try again', 'error')
       }
     }
 
-    checkStoreAvailability()
-  }, [activeStep, currentStore, currentUser?.id, formStoreId, showToast, storeUrl])
+    const debounceTimerId = window.setTimeout(checkStoreAvailability, 300)
+
+    return () => {
+      window.clearTimeout(debounceTimerId)
+    }
+  }, [activeStep, currentStore, formStoreId, showToast, storeUrl])
 
   useEffect(() => {
     setIsFormValid(
@@ -282,9 +291,10 @@ function Dashboard() {
     }
 
     try {
+      setStoreUrlError('')
       const storePayload = {
         name: storeName.trim(),
-        url: storeUrl.trim().toLowerCase(),
+        url: `${getStoreUrlSlug(storeUrl)}.projectx.com`,
         ownerEmail: currentUser.email ?? '',
         onboardingStep: 2,
       }
@@ -315,7 +325,21 @@ function Dashboard() {
       setActiveStep('add-products')
     } catch (error) {
       console.error(error)
-      showToast(isEditingExistingStore ? 'Something went wrong, please try again' : 'Failed to create store', 'error')
+      const parsedError = (() => {
+        try {
+          return JSON.parse(error.message)
+        } catch {
+          return null
+        }
+      })()
+      const message = parsedError?.message || error.message || 'Something went wrong, please try again'
+
+      if (message === 'Store Temporary URL already used') {
+        setIsUrlAvailable(false)
+        setStoreUrlError(message)
+      }
+
+      showToast(message, 'error')
     }
   }
 
@@ -552,7 +576,7 @@ function Dashboard() {
                       ) : null}
                     </div>
                     {isUrlAvailable === false ? (
-                      <p className="error-text">This URL is not available</p>
+                      <p className="error-text">{storeUrlError || 'This URL is not available'}</p>
                     ) : null}
                   </div>
 
