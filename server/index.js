@@ -1,12 +1,46 @@
 const path = require('node:path')
+const fs = require('node:fs')
 const express = require('express')
 const cors = require('cors')
 const bodyParser = require('body-parser')
 const nodemailer = require('nodemailer')
+const { createClient } = require('@supabase/supabase-js')
 const { readData, writeData } = require('./utils/fileDb')
+
+function loadLocalEnv() {
+  const envPath = path.join(__dirname, '.env')
+
+  if (!fs.existsSync(envPath)) {
+    return
+  }
+
+  const entries = fs.readFileSync(envPath, 'utf8').split(/\r?\n/)
+
+  entries.forEach((entry) => {
+    const trimmedEntry = entry.trim()
+
+    if (!trimmedEntry || trimmedEntry.startsWith('#') || !trimmedEntry.includes('=')) {
+      return
+    }
+
+    const separatorIndex = trimmedEntry.indexOf('=')
+    const key = trimmedEntry.slice(0, separatorIndex).trim()
+    const value = trimmedEntry.slice(separatorIndex + 1).trim()
+
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value
+    }
+  })
+}
+
+loadLocalEnv()
 
 const app = express()
 const PORT = process.env.PORT || 5001
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+)
 
 const productsFile = path.join(__dirname, 'data', 'products.json')
 const ordersFile = path.join(__dirname, 'data', 'orders.json')
@@ -1289,41 +1323,27 @@ app.post('/signup', (req, res) => {
   })
 })
 
-app.post('/login', (req, res) => {
-  const { email, password } = req.body
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body
 
-  if (!email || !password) {
-    res.status(400).json({ message: 'Email and password are required' })
-    return
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      return res.status(401).json({ message: error.message })
+    }
+
+    return res.json({
+      message: 'Login successful',
+      user: data.user,
+      session: data.session,
+    })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
   }
-
-  const users = readData(usersFile)
-  const normalizedEmail = String(email).trim().toLowerCase()
-  const user = users.find((entry) => entry.email.toLowerCase() === normalizedEmail)
-
-  if (!user) {
-    res.status(404).json({ message: 'User not found' })
-    return
-  }
-
-  if (user.password !== password) {
-    res.status(401).json({ message: 'Invalid password' })
-    return
-  }
-
-  if (user.isVerified !== true) {
-    res.status(403).json({ message: 'Please verify your email first' })
-    return
-  }
-
-  res.json({
-    message: 'Login successful',
-    user: {
-      id: user.id,
-      email: user.email,
-      isVerified: user.isVerified,
-    },
-  })
 })
 
 app.get('/users', (req, res) => {
