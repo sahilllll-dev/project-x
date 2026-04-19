@@ -27,11 +27,12 @@ function Signup() {
     try {
       const normalizedEmail = email.trim()
 
-      await signUpWithSupabase({
+      const signupResult = await signUpWithSupabase({
         email: normalizedEmail,
         password,
       })
 
+      console.log('Signup result:', signupResult, null)
       showToast('Account created successfully', 'success')
       setEmail('')
       setPassword('')

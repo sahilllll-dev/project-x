@@ -254,13 +254,6 @@ export function toggleStoreApp(storeId, appId, enabled) {
   })
 }
 
-export function signupUser(data) {
-  return request('/signup', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-}
-
 export function loginUser(data) {
   return request('/login', {
     method: 'POST',

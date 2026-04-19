@@ -1285,44 +1285,6 @@ app.get('/store-by-url/:url', (req, res) => {
   res.json(store)
 })
 
-app.post('/signup', (req, res) => {
-  const { email, password } = req.body
-
-  if (!email || !password) {
-    res.status(400).json({ message: 'Email and password are required' })
-    return
-  }
-
-  const users = readData(usersFile)
-  const normalizedEmail = String(email).trim().toLowerCase()
-  const userExists = users.some((user) => user.email.toLowerCase() === normalizedEmail)
-
-  if (userExists) {
-    res.status(409).json({ message: 'User already exists' })
-    return
-  }
-
-  const newUser = {
-    id: Date.now(),
-    email: normalizedEmail,
-    password,
-    isVerified: true,
-    verificationToken: null,
-    tokenExpiry: null,
-  }
-
-  users.push(newUser)
-  writeData(usersFile, users)
-  res.status(201).json({
-    message: 'Account created successfully',
-    user: {
-      id: newUser.id,
-      email: newUser.email,
-      isVerified: newUser.isVerified,
-    },
-  })
-})
-
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body
