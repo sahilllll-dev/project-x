@@ -245,6 +245,14 @@
   font-weight: 600;
 }
 
+.stores-list__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .dashboard-intro p {
   margin: 6px 0 0;
   color: #7b8190;

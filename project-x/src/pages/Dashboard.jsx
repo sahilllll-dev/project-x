@@ -199,32 +199,38 @@ function Dashboard() {
 
     async function checkStoreAvailability() {
       try {
-        const normalizedSlug = getStoreUrlSlug(storeUrl)
+        const slug = (getStoreUrlSlug(storeUrl) || '').toLowerCase().trim()
+
+        if (!slug) {
+          setIsUrlAvailable(false)
+          setStoreUrlError('Slug is required')
+          return
+        }
 
         if (
           currentStore?.id &&
-          normalizedSlug === getStoreUrlSlug(currentStore.url ?? '')
+          slug === (getStoreUrlSlug(currentStore.url ?? '') || '').toLowerCase().trim()
         ) {
           setIsUrlAvailable(true)
           setStoreUrlError('')
           return
         }
 
-        const response = await checkStoreSlug(normalizedSlug, currentStore?.id)
+        const response = await checkStoreSlug(slug, currentStore?.id)
         setIsUrlAvailable(response.available)
         setStoreUrlError(response.available ? '' : 'Store Temporary URL already used')
 
-        if (!response.available && lastTakenUrlToastRef.current !== normalizedSlug) {
+        if (!response.available && lastTakenUrlToastRef.current !== slug) {
           showToast('Store Temporary URL already used', 'error')
-          lastTakenUrlToastRef.current = normalizedSlug
+          lastTakenUrlToastRef.current = slug
         }
-        if (response.available && lastTakenUrlToastRef.current === normalizedSlug) {
+        if (response.available && lastTakenUrlToastRef.current === slug) {
           lastTakenUrlToastRef.current = ''
         }
       } catch (error) {
         console.error(error)
         setIsUrlAvailable(false)
-        setStoreUrlError('Unable to verify Store Temporary URL')
+        setStoreUrlError('Unable to verify URL')
         showToast('Something went wrong, please try again', 'error')
       }
     }

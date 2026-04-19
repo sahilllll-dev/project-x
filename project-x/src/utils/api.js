@@ -210,8 +210,24 @@ export function getStoresByUserId(userId) {
   return request(`/stores/${userId}`)
 }
 
+export function getStores() {
+  return request('/stores')
+}
+
+export function deleteStore(storeId) {
+  return request(`/stores/${storeId}`, {
+    method: 'DELETE',
+  })
+}
+
 export function checkStoreSlug(slug, excludeStoreId) {
-  const params = new URLSearchParams({ slug })
+  const normalizedSlug = (slug || '').toLowerCase().trim()
+
+  if (!normalizedSlug) {
+    return Promise.reject(new Error('Invalid slug'))
+  }
+
+  const params = new URLSearchParams({ slug: normalizedSlug })
 
   if (excludeStoreId) {
     params.set('excludeStoreId', String(excludeStoreId))

@@ -1060,6 +1060,11 @@ app.delete('/customers/:id', (req, res) => {
   res.json({ message: 'Customer deleted successfully' })
 })
 
+app.get('/stores', (req, res) => {
+  const stores = readData(storesFile)
+  res.json(stores)
+})
+
 app.post('/stores', (req, res) => {
   const { userId, name, url } = req.body
 
@@ -1119,6 +1124,20 @@ app.put('/stores/:id', (req, res) => {
 
   writeData(storesFile, stores)
   res.json(stores[storeIndex])
+})
+
+app.delete('/stores/:id', (req, res) => {
+  const storeId = Number(req.params.id)
+  const stores = readData(storesFile)
+  const filteredStores = stores.filter((store) => store.id !== storeId)
+
+  if (filteredStores.length === stores.length) {
+    res.status(404).json({ message: 'Store not found' })
+    return
+  }
+
+  writeData(storesFile, filteredStores)
+  res.json({ message: 'Store deleted successfully' })
 })
 
 app.put('/stores/:id/theme', (req, res) => {
@@ -1197,16 +1216,18 @@ app.get('/themes', (req, res) => {
 console.log('Route /store/check-slug loaded')
 app.get('/store/check-slug', async (req, res) => {
   try {
-    const { slug, excludeStoreId } = req.query
+    let { slug } = req.query
+    const { excludeStoreId } = req.query
 
-    if (!slug) {
-      return res.status(400).json({ message: 'Slug is required' })
+    if (!slug || typeof slug !== 'string') {
+      return res.status(400).json({ available: false, error: 'Invalid slug' })
     }
 
+    slug = slug.toLowerCase().trim()
     const normalizedSlug = normalizeStoreSlug(slug)
 
     if (!normalizedSlug) {
-      return res.status(400).json({ message: 'Slug is required' })
+      return res.status(400).json({ available: false, error: 'Invalid slug' })
     }
 
     if (supabaseAdmin) {
@@ -1219,13 +1240,13 @@ app.get('/store/check-slug', async (req, res) => {
         query = query.neq('id', excludeStoreId)
       }
 
-      const { data, error } = await query
+      const { data, error } = await query.maybeSingle()
 
       if (error) {
-        return res.status(500).json({ message: 'Error checking slug' })
+        return res.status(500).json({ available: false, error: 'Error checking slug' })
       }
 
-      return res.json({ available: data.length === 0 })
+      return res.json({ available: !data })
     }
 
     const stores = readData(storesFile)
@@ -1235,7 +1256,7 @@ app.get('/store/check-slug', async (req, res) => {
       available: !isStoreUrlTaken(stores, normalizedUrl, excludeStoreId),
     })
   } catch (err) {
-    return res.status(500).json({ message: 'Server error' })
+    return res.status(500).json({ available: false, error: 'Server error' })
   }
 })
 
