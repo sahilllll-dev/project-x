@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import ApiProgressBar from './components/ApiProgressBar.jsx'
 import AuthLayout from './layout/AuthLayout.jsx'
 import MainLayout from './layout/MainLayout.jsx'
