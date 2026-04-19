@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1776608444218,
+    "storeId": 1776439812437,
+    "name": "SAURABH MIDHA",
+    "email": "business@doublechabi.com",
+    "phone": "09643546070",
+    "totalOrders": 1,
+    "totalSpent": 100000,
+    "createdAt": 1776608444218
+  },
+  {
+    "id": 1776609731796,
+    "storeId": 1776439812437,
+    "name": "Sahil Ansari",
+    "email": "test1111@gmail.com",
+    "phone": "09643546070",
+    "totalOrders": 1,
+    "totalSpent": 99900,
+    "createdAt": 1776609731796
+  }
+]

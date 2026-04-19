@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1776439812437,
+    "userId": "078303b1-e3e6-4d41-9204-38ebd9e9d632",
+    "name": "Lensila",
+    "url": "lensila.projectx.com",
+    "themeId": "kalles",
+    "themeConfig": {
+      "heroTitle": "Welcome to your store",
+      "showBrands": true,
+      "primaryColor": "#ff0000"
+    },
+    "onboardingStep": 3
+  },
+  {
+    "id": 1776607013668,
+    "userId": "078303b1-e3e6-4d41-9204-38ebd9e9d632",
+    "name": "Trendio",
+    "url": "trendio.projectx.com",
+    "themeId": "minimal",
+    "themeConfig": {
+      "heroTitle": "Welcome to your store",
+      "showBrands": true,
+      "primaryColor": "#111111"
+    },
+    "onboardingStep": 3,
+    "isOnboardingCompleted": false
+  }
+]

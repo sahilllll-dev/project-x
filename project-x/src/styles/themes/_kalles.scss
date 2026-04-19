@@ -1,0 +1,383 @@
+.theme-card__preview--kalles {
+  background:
+    radial-gradient(circle at top left, rgba(224, 196, 161, 0.55), transparent 45%),
+    linear-gradient(180deg, #fffdf9 0%, #f1ece4 100%);
+  color: #2a2118;
+}
+
+.store-theme--kalles {
+  padding: 24px;
+  background: #ffffff;
+  color: #1f1a17;
+}
+
+.kalles-theme__header,
+.kalles-brand-strip,
+.kalles-products,
+.kalles-footer,
+.kalles-hero-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.kalles-theme__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 0 30px;
+}
+
+.kalles-theme__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.kalles-theme__brand strong {
+  display: block;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kalles-theme__brand p {
+  margin: 4px 0 0;
+  color: #80766f;
+  font-size: 0.83rem;
+}
+
+.kalles-theme__brand-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #ded8d1;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.kalles-theme__nav {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+
+.kalles-theme__nav a {
+  color: #3a312c;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.kalles-theme__actions {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.kalles-theme__actions button,
+.kalles-load-more,
+.kalles-product-card__button {
+  border: 1px solid #d7d0ca;
+  background: #fff;
+  color: #1f1a17;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.kalles-theme__actions button {
+  padding: 10px 16px;
+  border-radius: 999px;
+}
+
+.kalles-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.kalles-hero-grid__item {
+  position: relative;
+  min-height: 260px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #f5f1ec;
+}
+
+.kalles-hero-grid__item--large {
+  grid-column: span 2;
+  min-height: 420px;
+}
+
+.kalles-hero-grid__item--medium {
+  grid-column: span 1;
+}
+
+.kalles-hero-grid__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kalles-hero-grid__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 24px;
+  background: linear-gradient(180deg, rgba(24, 18, 14, 0.08) 0%, rgba(24, 18, 14, 0.68) 100%);
+  color: #fff;
+}
+
+.kalles-hero-grid__overlay span,
+.kalles-products__heading span {
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.kalles-hero-grid__overlay h2,
+.kalles-products__heading h2 {
+  margin: 0;
+  font-size: clamp(1.4rem, 2vw, 2.5rem);
+  line-height: 1.05;
+}
+
+.kalles-hero-grid__overlay a {
+  display: inline-flex;
+  width: fit-content;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.75);
+}
+
+.kalles-brand-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 34px;
+}
+
+.kalles-brand-strip__item {
+  padding: 18px;
+  border: 1px solid #ece6e0;
+  border-radius: 18px;
+  text-align: center;
+  color: #655b55;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.kalles-products {
+  padding: 24px 0 40px;
+}
+
+.kalles-products__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.kalles-products__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.kalles-product-card {
+  overflow: hidden;
+  border-radius: 22px;
+  background: #fff;
+}
+
+.kalles-product-card:hover {
+  transform: translateY(-4px);
+}
+
+.kalles-product-card:hover .kalles-product-card__media img {
+  transform: scale(1.04);
+}
+
+.kalles-product-card__media {
+  position: relative;
+  aspect-ratio: 0.82;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #f5f1ec;
+}
+
+.kalles-product-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 220ms ease;
+}
+
+.kalles-product-card__badge,
+.kalles-product-card__stock {
+  position: absolute;
+  top: 14px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kalles-product-card__badge {
+  left: 14px;
+  background: #1f1a17;
+  color: #fff;
+}
+
+.kalles-product-card__stock {
+  right: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #8f2d1f;
+}
+
+.kalles-product-card__content {
+  padding: 16px 6px 4px;
+}
+
+.kalles-product-card__content h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.kalles-product-card__price {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.kalles-product-card__price strong {
+  font-size: 1rem;
+}
+
+.kalles-product-card__price span {
+  color: #9b918a;
+  text-decoration: line-through;
+}
+
+.kalles-product-card__button {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 999px;
+}
+
+.kalles-product-card__button:hover:not(:disabled),
+.kalles-load-more:hover,
+.kalles-theme__actions button:hover {
+  background: #1f1a17;
+  color: #fff;
+  border-color: #1f1a17;
+  box-shadow: 0 18px 40px rgba(31, 26, 23, 0.14);
+}
+
+.kalles-product-card__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.kalles-products__footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.kalles-load-more {
+  padding: 14px 28px;
+  border-radius: 999px;
+}
+
+.kalles-footer {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 24px;
+  padding: 40px 0 24px;
+  border-top: 1px solid #ece6e0;
+}
+
+.kalles-footer h3,
+.kalles-footer h4 {
+  margin: 0 0 14px;
+}
+
+.kalles-footer p,
+.kalles-footer li {
+  color: #6f655f;
+  line-height: 1.7;
+}
+
+.kalles-footer ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 1024px) {
+  .kalles-theme__header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .kalles-hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kalles-hero-grid__item--large,
+  .kalles-hero-grid__item--medium {
+    grid-column: span 1;
+    min-height: 320px;
+  }
+
+  .kalles-brand-strip,
+  .kalles-products__grid,
+  .kalles-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .store-theme--kalles {
+    padding: 18px;
+  }
+
+  .kalles-theme__nav,
+  .kalles-theme__actions {
+    justify-content: center;
+  }
+
+  .kalles-hero-grid,
+  .kalles-brand-strip,
+  .kalles-products__grid,
+  .kalles-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .kalles-hero-grid__item,
+  .kalles-hero-grid__item--large,
+  .kalles-hero-grid__item--medium {
+    min-height: 280px;
+  }
+}

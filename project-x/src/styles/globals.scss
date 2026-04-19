@@ -1,0 +1,39 @@
+@use './variables';
+@use './core-layout';
+@use './header-styles';
+@use './sidebar-styles';
+@use './form-styles';
+@use './product-form';
+@use './toast';
+@use './themes/kalles';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
