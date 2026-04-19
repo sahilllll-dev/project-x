@@ -6,7 +6,7 @@ const nodemailer = require('nodemailer')
 const { readData, writeData } = require('./utils/fileDb')
 
 const app = express()
-const port = 5001
+const PORT = process.env.PORT || 5001
 
 const productsFile = path.join(__dirname, 'data', 'products.json')
 const ordersFile = path.join(__dirname, 'data', 'orders.json')
@@ -360,23 +360,27 @@ function upsertCustomerForOrder(order) {
   return newCustomer
 }
 
-const corsOptions = {
-  origin: 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-}
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+]
 
-app.use(cors(corsOptions))
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like Postman or mobile apps)
+    if (!origin) return callback(null, true)
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true)
+    } else {
+      console.log('❌ Blocked by CORS:', origin)
+      return callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true,
+}))
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:5173')
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type')
-
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(204)
-    return
-  }
-
+  console.log(`Incoming request from origin: ${req.headers.origin}`)
   next()
 })
 app.use(express.json({ limit: '5mb' }))
@@ -1362,9 +1366,9 @@ app.get('/verify', (req, res) => {
   }
 
   writeData(usersFile, users)
-  res.redirect('http://localhost:5173/login?verified=true')
+  res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?verified=true`)
 })
 
-app.listen(port, () => {
-  console.log('Server running on port 5001')
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
 })
