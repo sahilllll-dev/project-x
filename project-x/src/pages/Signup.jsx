@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Button from '../components/ui/Button.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { signupUser } from '../utils/api.js'
-import { isSupabaseConfigured, signUpWithSupabase } from '../utils/supabase.js'
+import { signUpWithSupabase } from '../utils/supabase.js'
 
 function Signup() {
   const { showToast } = useToast()
@@ -28,17 +27,10 @@ function Signup() {
     try {
       const normalizedEmail = email.trim()
 
-      if (isSupabaseConfigured) {
-        await signUpWithSupabase({
-          email: normalizedEmail,
-          password,
-        })
-      } else {
-        await signupUser({
-          email: normalizedEmail,
-          password,
-        })
-      }
+      await signUpWithSupabase({
+        email: normalizedEmail,
+        password,
+      })
 
       showToast('Account created successfully', 'success')
       setEmail('')
