@@ -16,9 +16,13 @@ function getProductImage(product) {
 
 function ModernTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
   const themeConfig = getThemeConfig(store?.themeConfig)
+  const layout = themeConfig.layout === 'list' ? 'list' : 'grid'
 
   return (
-    <main className="store-theme store-theme--modern">
+    <main
+      className="store-theme store-theme--modern"
+      style={{ color: themeConfig.primaryColor, fontFamily: themeConfig.font }}
+    >
       <header className="store-theme__header store-theme__header--modern">
         <div>
           <p className="store-theme__eyebrow">{store?.url}</p>
@@ -30,7 +34,7 @@ function ModernTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
       {products.length === 0 ? (
         <p className="public-store__empty">No products found</p>
       ) : (
-        <section className="store-theme__grid store-theme__grid--modern">
+        <section className={`store-theme__grid store-theme__grid--modern store-theme__grid--${layout}`}>
           {products.map((product) => {
             const isOutOfStock = Number(product.quantity) === 0
 

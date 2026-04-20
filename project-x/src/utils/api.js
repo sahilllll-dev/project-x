@@ -277,6 +277,29 @@ export function updateStoreThemeConfig(storeId, themeConfig) {
   })
 }
 
+export function getActiveTheme(storeId) {
+  return request(`/api/theme/${storeId}`)
+}
+
+export function saveThemeConfig(storeId, config) {
+  return request('/api/theme/config', {
+    method: 'POST',
+    body: JSON.stringify({ storeId, config }),
+  })
+}
+
+export function getStorePage(storeId, slug = '/') {
+  const params = new URLSearchParams({ slug })
+  return request(`/store-page/${storeId}?${params.toString()}`)
+}
+
+export function saveStorePage({ storeId, name = 'homepage', slug = '/', layout }) {
+  return request('/api/page/save', {
+    method: 'POST',
+    body: JSON.stringify({ storeId, name, slug, layout }),
+  })
+}
+
 export function getApps() {
   return request('/apps')
 }

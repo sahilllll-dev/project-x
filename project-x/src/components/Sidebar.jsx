@@ -35,6 +35,8 @@ const mainMenuItems = [
 
 const storeMenuItems = [
   { label: 'Themes', to: '/themes', icon: themesIcon },
+  { label: 'Theme Editor', to: '/dashboard/themes/editor', icon: themesIcon },
+  { label: 'Visual Editor', to: '/dashboard/editor', icon: pagesIcon },
   { label: 'Theme Settings', to: '/dashboard/theme-settings', icon: themesIcon },
   { label: 'Apps', to: '/apps', icon: appsIcon, badgeKey: 'apps' },
   { label: 'Pages', to: '/pages', icon: pagesIcon, badge: '6' },

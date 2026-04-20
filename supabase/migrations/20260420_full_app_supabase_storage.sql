@@ -4,7 +4,7 @@ alter table public.stores
   alter column address1 set default '',
   add column if not exists owner_email text default '',
   add column if not exists theme_id text not null default 'minimal',
-  add column if not exists theme_config jsonb not null default '{"heroTitle":"Welcome to your store","showBrands":true,"primaryColor":"#111111"}'::jsonb,
+  add column if not exists theme_config jsonb not null default '{"heroTitle":"Welcome to your store","showBrands":true,"primaryColor":"#000000","font":"Inter","layout":"grid"}'::jsonb,
   add column if not exists onboarding_step integer not null default 1,
   add column if not exists is_onboarding_completed boolean not null default false;
 

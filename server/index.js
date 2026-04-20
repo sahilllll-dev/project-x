@@ -21,7 +21,9 @@ const supabase =
 const defaultThemeConfig = {
   heroTitle: 'Welcome to your store',
   showBrands: true,
-  primaryColor: '#111111',
+  primaryColor: '#000000',
+  font: 'Inter',
+  layout: 'grid',
 }
 const defaultLowStockThreshold = 5
 
@@ -32,24 +34,6 @@ const apps = [
     description: 'Optimize your product SEO and Google visibility',
     icon: 'seo-icon',
     isActive: true,
-  },
-]
-
-const themes = [
-  {
-    id: 'minimal',
-    name: 'Minimal Store',
-    description: 'Clean and simple layout',
-  },
-  {
-    id: 'modern',
-    name: 'Modern Store',
-    description: 'Bold and product-focused layout',
-  },
-  {
-    id: 'kalles',
-    name: 'Kalles Style',
-    description: 'Modern fashion eCommerce layout with hero banners and product grid',
   },
 ]
 
@@ -166,6 +150,195 @@ function toStore(row) {
     logoUrl: row.logo_url ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function toTheme(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.code,
+    uuid: row.id,
+    code: row.code,
+    name: row.name,
+    previewImage: row.preview_image ?? '',
+    createdAt: row.created_at,
+  }
+}
+
+function toStorePage(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    name: row.name ?? 'homepage',
+    slug: row.slug ?? '/',
+    layout: row.layout ?? {},
+    createdAt: row.created_at,
+  }
+}
+
+function getDefaultPageLayout() {
+  return {
+    sections: [
+      {
+        id: 'section-default',
+        columns: [
+          {
+            id: 'column-default',
+            widgets: [
+              {
+                id: 'widget-heading-default',
+                type: 'heading',
+                content: 'Welcome to Store',
+                fontSize: 44,
+              },
+              {
+                id: 'widget-products-default',
+                type: 'products',
+                limit: 6,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ?? ''))
+}
+
+async function getThemeByIdentifier(identifier) {
+  const value = String(identifier ?? '').trim()
+
+  if (!value) {
+    return null
+  }
+
+  const { data: themeByCode, error: codeError } = await supabase
+    .from('themes')
+    .select('*')
+    .eq('code', value)
+    .maybeSingle()
+
+  if (codeError) {
+    throw codeError
+  }
+
+  if (themeByCode || !isUuid(value)) {
+    return themeByCode
+  }
+
+  const { data: themeById, error: idError } = await supabase
+    .from('themes')
+    .select('*')
+    .eq('id', value)
+    .maybeSingle()
+
+  if (idError) {
+    throw idError
+  }
+
+  return themeById
+}
+
+async function ensureActiveStoreTheme(store, config = getThemeConfig(store?.theme_config)) {
+  const theme = await getThemeByIdentifier(store?.theme_id ?? 'minimal')
+
+  if (!theme) {
+    return null
+  }
+
+  const { data: activeStoreTheme, error: activeError } = await supabase
+    .from('store_themes')
+    .select('*')
+    .eq('store_id', store.id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (activeError) {
+    throw activeError
+  }
+
+  if (activeStoreTheme) {
+    const { data, error } = await supabase
+      .from('store_themes')
+      .update({ theme_id: theme.id, config })
+      .eq('id', activeStoreTheme.id)
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    return data
+  }
+
+  const { data, error } = await supabase
+    .from('store_themes')
+    .insert([{ store_id: store.id, theme_id: theme.id, config, is_active: true }])
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+async function getActiveThemeForStore(storeId) {
+  const { data: store, error: storeError } = await supabase
+    .from('stores')
+    .select('*')
+    .eq('id', storeId)
+    .maybeSingle()
+
+  if (storeError) {
+    throw storeError
+  }
+
+  if (!store) {
+    return null
+  }
+
+  let { data: storeTheme, error: storeThemeError } = await supabase
+    .from('store_themes')
+    .select('*')
+    .eq('store_id', store.id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (storeThemeError) {
+    throw storeThemeError
+  }
+
+  if (!storeTheme) {
+    storeTheme = await ensureActiveStoreTheme(store)
+  }
+
+  const { data: theme, error: themeError } = await supabase
+    .from('themes')
+    .select('*')
+    .eq('id', storeTheme.theme_id)
+    .maybeSingle()
+
+  if (themeError) {
+    throw themeError
+  }
+
+  return {
+    store,
+    theme,
+    config: getThemeConfig(storeTheme.config),
   }
 }
 
@@ -1226,25 +1399,70 @@ app.delete('/stores/:id', async (req, res) => {
 app.put('/stores/:id/theme', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  if (!themes.some((theme) => theme.id === req.body.themeId)) {
-    return res.status(400).json({ message: 'Invalid themeId' })
-  }
+  try {
+    const theme = await getThemeByIdentifier(req.body.themeId)
 
-  const { data, error } = await supabase.from('stores').update({ theme_id: req.body.themeId }).eq('id', req.params.id).select().single()
-  if (error) return sendInvalidData(res, error)
-  res.json(toStore(data))
+    if (!theme) {
+      return res.status(400).json({ message: 'Invalid themeId' })
+    }
+
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle()
+
+    if (storeError) return sendInvalidData(res, storeError)
+    if (!store) return res.status(404).json({ message: 'Store not found' })
+
+    const config = getThemeConfig(store.theme_config)
+    const { error: deactivateError } = await supabase
+      .from('store_themes')
+      .update({ is_active: false })
+      .eq('store_id', req.params.id)
+      .eq('is_active', true)
+
+    if (deactivateError) return sendInvalidData(res, deactivateError)
+
+    const { error: storeThemeError } = await supabase
+      .from('store_themes')
+      .insert([{ store_id: req.params.id, theme_id: theme.id, config, is_active: true }])
+
+    if (storeThemeError) return sendInvalidData(res, storeThemeError)
+
+    const { data, error } = await supabase
+      .from('stores')
+      .update({ theme_id: theme.code, theme_config: config })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+    res.json(toStore(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
 })
 
 app.put('/stores/:id/theme-config', async (req, res) => {
   if (!requireSupabase(res)) return
-  const { data, error } = await supabase
-    .from('stores')
-    .update({ theme_config: getThemeConfig(req.body.themeConfig) })
-    .eq('id', req.params.id)
-    .select()
-    .single()
-  if (error) return sendInvalidData(res, error)
-  res.json(toStore(data))
+
+  try {
+    const config = getThemeConfig(req.body.themeConfig)
+    const { data, error } = await supabase
+      .from('stores')
+      .update({ theme_config: config })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+
+    await ensureActiveStoreTheme(data, config)
+    res.json(toStore(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
 })
 
 app.get('/stores/:userId', async (req, res) => {
@@ -1254,8 +1472,127 @@ app.get('/stores/:userId', async (req, res) => {
   res.json(data.map(toStore))
 })
 
-app.get('/themes', (req, res) => {
-  res.json(themes)
+app.get('/themes', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const { data, error } = await supabase
+    .from('themes')
+    .select('*')
+    .order('created_at', { ascending: true })
+
+  if (error) return sendInvalidData(res, error)
+  res.json(data.map(toTheme))
+})
+
+app.get('/api/theme/:storeId', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const activeTheme = await getActiveThemeForStore(req.params.storeId)
+
+    if (!activeTheme) {
+      return res.status(404).json({ message: 'Store not found' })
+    }
+
+    res.json({
+      store: toStore(activeTheme.store),
+      theme: toTheme(activeTheme.theme),
+      config: activeTheme.config,
+    })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.post('/api/theme/config', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = req.body.storeId
+    const config = getThemeConfig(req.body.config)
+
+    if (!storeId) {
+      return res.status(400).json({ message: 'storeId is required' })
+    }
+
+    const activeTheme = await getActiveThemeForStore(storeId)
+
+    if (!activeTheme) {
+      return res.status(404).json({ message: 'Store not found' })
+    }
+
+    const { error: storeThemeError } = await supabase
+      .from('store_themes')
+      .update({ config })
+      .eq('store_id', storeId)
+      .eq('is_active', true)
+
+    if (storeThemeError) return sendInvalidData(res, storeThemeError)
+
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .update({ theme_config: config })
+      .eq('id', storeId)
+      .select()
+      .single()
+
+    if (storeError) return sendInvalidData(res, storeError)
+
+    res.json({
+      store: toStore(store),
+      theme: toTheme(activeTheme.theme),
+      config,
+    })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/store-page/:storeId', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const slug = req.query.slug ?? '/'
+  const { data, error } = await supabase
+    .from('store_pages')
+    .select('*')
+    .eq('store_id', req.params.storeId)
+    .eq('slug', slug)
+    .maybeSingle()
+
+  if (error) return sendInvalidData(res, error)
+
+  if (!data) {
+    return res.json({
+      storeId: req.params.storeId,
+      name: 'homepage',
+      slug,
+      layout: getDefaultPageLayout(),
+    })
+  }
+
+  res.json(toStorePage(data))
+})
+
+app.post('/api/page/save', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = req.body.storeId
+  const name = String(req.body.name || 'homepage').trim() || 'homepage'
+  const slug = String(req.body.slug || '/').trim() || '/'
+  const layout = req.body.layout && typeof req.body.layout === 'object' ? req.body.layout : getDefaultPageLayout()
+
+  if (!storeId) {
+    return res.status(400).json({ message: 'storeId is required' })
+  }
+
+  const { data, error } = await supabase
+    .from('store_pages')
+    .upsert([{ store_id: storeId, name, slug, layout }], { onConflict: 'store_id,slug' })
+    .select()
+    .single()
+
+  if (error) return sendInvalidData(res, error)
+  res.json(toStorePage(data))
 })
 
 console.log('Route /store/check-slug loaded')

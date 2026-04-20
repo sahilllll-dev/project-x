@@ -1,7 +1,9 @@
 export const DEFAULT_THEME_CONFIG = {
   heroTitle: 'Welcome to your store',
   showBrands: true,
-  primaryColor: '#111111',
+  primaryColor: '#000000',
+  font: 'Inter',
+  layout: 'grid',
 }
 
 export function getThemeConfig(themeConfig) {

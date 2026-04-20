@@ -16,9 +16,13 @@ function getProductImage(product) {
 
 function MinimalTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
   const themeConfig = getThemeConfig(store?.themeConfig)
+  const layout = themeConfig.layout === 'list' ? 'list' : 'grid'
 
   return (
-    <main className="store-theme store-theme--minimal">
+    <main
+      className="store-theme store-theme--minimal"
+      style={{ color: themeConfig.primaryColor, fontFamily: themeConfig.font }}
+    >
       <header className="store-theme__header store-theme__header--minimal">
         <p className="store-theme__eyebrow">{store?.url}</p>
         <h1>{store?.name ?? 'Your Store'}</h1>
@@ -28,7 +32,7 @@ function MinimalTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
       {products.length === 0 ? (
         <p className="public-store__empty">No products found</p>
       ) : (
-        <section className="store-theme__grid store-theme__grid--minimal">
+        <section className={`store-theme__grid store-theme__grid--minimal store-theme__grid--${layout}`}>
           {products.map((product) => {
             const isOutOfStock = Number(product.quantity) === 0
 

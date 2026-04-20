@@ -246,7 +246,11 @@ function KallesTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
   return (
     <main
       className="store-theme store-theme--kalles"
-      style={{ '--kalles-primary-color': themeConfig.primaryColor }}
+      style={{
+        '--kalles-primary-color': themeConfig.primaryColor,
+        color: themeConfig.primaryColor,
+        fontFamily: themeConfig.font,
+      }}
     >
       <KallesHeader store={store} primaryColor={themeConfig.primaryColor} />
       <HeroGrid heroTitle={themeConfig.heroTitle} />

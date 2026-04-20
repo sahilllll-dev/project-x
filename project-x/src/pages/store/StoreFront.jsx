@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
-import { createOrder, getProducts, getStoreApps, getStoreByUrl, validateCoupon } from '../../utils/api.js'
-import MinimalTheme from '../../components/themes/MinimalTheme.jsx'
-import ModernTheme from '../../components/themes/ModernTheme.jsx'
-import KallesTheme from '../../components/themes/KallesTheme.jsx'
+import { createOrder, getProducts, getStoreApps, getStoreByUrl, getStorePage, validateCoupon } from '../../utils/api.js'
+import ThemeRenderer from '../../components/themes/ThemeRenderer.jsx'
+import PageRenderer from '../../components/page-builder/PageRenderer.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
@@ -55,6 +54,7 @@ function StoreFront() {
   const { showToast } = useToast()
   const [store, setStore] = useState(null)
   const [products, setProducts] = useState([])
+  const [pageLayout, setPageLayout] = useState(null)
   const [useSeoProductUrls, setUseSeoProductUrls] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -99,11 +99,13 @@ function StoreFront() {
           getProducts(matchedStore.id),
           getStoreApps(matchedStore.id),
         ])
+        const page = await getStorePage(matchedStore.id)
         console.log('Products:', response)
         setUseSeoProductUrls(
           installedApps.some((storeApp) => storeApp.appId === 'seo-helper' && storeApp.enabled),
         )
         setProducts(response.filter((product) => product.status === 'active'))
+        setPageLayout(page.layout)
       } catch (error) {
         console.error(error)
         setStore({
@@ -113,6 +115,7 @@ function StoreFront() {
         })
         setUseSeoProductUrls(false)
         setProducts([])
+        setPageLayout(null)
       } finally {
         setIsLoading(false)
       }
@@ -241,15 +244,11 @@ function StoreFront() {
       useSeoProductUrls,
     }
 
-    if (store?.themeId === 'modern') {
-      return <ModernTheme {...themeProps} />
+    if (pageLayout?.sections?.length) {
+      return <PageRenderer layout={pageLayout} {...themeProps} />
     }
 
-    if (store?.themeId === 'kalles') {
-      return <KallesTheme {...themeProps} />
-    }
-
-    return <MinimalTheme {...themeProps} />
+    return <ThemeRenderer themeCode={store?.themeId} config={store?.themeConfig} {...themeProps} />
   }
 
   return (
