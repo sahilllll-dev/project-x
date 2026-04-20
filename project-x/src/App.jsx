@@ -5,7 +5,9 @@ import AuthLayout from './layout/AuthLayout.jsx'
 import MainLayout from './layout/MainLayout.jsx'
 import Apps from './pages/Apps.jsx'
 import AddProduct from './pages/AddProduct.jsx'
+import Blogs from './pages/Blogs.jsx'
 import BlogPost from './pages/BlogPost.jsx'
+import BlogPosts from './pages/BlogPosts.jsx'
 import Categories from './pages/Categories.jsx'
 import CustomerDetails from './pages/CustomerDetails.jsx'
 import Customers from './pages/Customers.jsx'
@@ -151,7 +153,11 @@ function App() {
             <Route path="/dashboard/coupons" element={<Coupons />} />
             <Route path="/apps" element={<Apps />} />
             <Route path="/pages" element={<Pages />} />
-            <Route path="/blog-post" element={<BlogPost />} />
+            <Route path="/blogs" element={<Blogs />} />
+            <Route path="/blogs/:id" element={<BlogPosts />} />
+            <Route path="/blogs/:blogId/posts/new" element={<BlogPost />} />
+            <Route path="/blogs/:blogId/posts/:postId/edit" element={<BlogPost />} />
+            <Route path="/blog-post" element={<Blogs />} />
           </Route>
         </Route>
       </Routes>

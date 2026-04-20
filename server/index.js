@@ -397,6 +397,43 @@ function toCategory(row) {
   }
 }
 
+function toBlog(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    title: row.title ?? '',
+    handle: row.handle ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toBlogPost(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    blogId: row.blog_id,
+    title: row.title ?? '',
+    slug: row.slug ?? '',
+    excerpt: row.excerpt ?? '',
+    content: row.content ?? '',
+    featuredImage: row.featured_image ?? '',
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    isPublished: Boolean(row.is_published),
+    publishedAt: row.published_at ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
 function toCoupon(row) {
   if (!row) {
     return null
@@ -1026,6 +1063,327 @@ app.delete('/categories/:id', async (req, res) => {
     if (!data) return res.status(404).json({ message: 'Category not found' })
 
     res.json({ message: 'Category deleted successfully' })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/blogs', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const { data, error } = await supabase
+      .from('blogs')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false })
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Blogs table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.json(data.map(toBlog))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.post('/blogs', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const title = String(req.body.title ?? '').trim()
+    const handle = normalizeStoreSlug(req.body.handle ?? title)
+
+    if (!title) return res.status(400).json({ message: 'Blog title is required' })
+    if (!handle) return res.status(400).json({ message: 'Blog handle is required' })
+
+    const { data, error } = await supabase
+      .from('blogs')
+      .insert([{ store_id: storeId, title, handle }])
+      .select()
+      .single()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'Blog handle already exists' })
+    }
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Blogs table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.status(201).json(toBlog(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.put('/blogs/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const update = {}
+
+    if (req.body.title !== undefined) {
+      const title = String(req.body.title ?? '').trim()
+      if (!title) return res.status(400).json({ message: 'Blog title is required' })
+      update.title = title
+    }
+
+    if (req.body.handle !== undefined) {
+      const handle = normalizeStoreSlug(req.body.handle)
+      if (!handle) return res.status(400).json({ message: 'Blog handle is required' })
+      update.handle = handle
+    }
+
+    let query = supabase.from('blogs').update(update).eq('id', req.params.id)
+    const storeId = getRequestStoreId(req)
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query.select().maybeSingle()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'Blog handle already exists' })
+    }
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Blogs table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Blog not found' })
+
+    res.json(toBlog(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.delete('/blogs/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    let query = supabase.from('blogs').delete().eq('id', req.params.id)
+    const storeId = getRequestStoreId(req)
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query.select('id').maybeSingle()
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Blogs table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Blog not found' })
+
+    res.json({ message: 'Blog deleted successfully' })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/posts', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const blogId = req.query.blogId ?? req.query.blog_id
+    const storeId = req.query.storeId ?? req.query.store_id
+
+    if (!blogId) return res.status(400).json({ message: 'blogId is required' })
+
+    let query = supabase
+      .from('posts')
+      .select('*')
+      .eq('blog_id', blogId)
+      .order('created_at', { ascending: false })
+
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Posts table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.json(data.map(toBlogPost))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/posts/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const blogId = req.query.blogId ?? req.query.blog_id
+    const storeId = req.query.storeId ?? req.query.store_id
+    let query = supabase.from('posts').select('*').eq('id', req.params.id)
+
+    if (blogId) {
+      query = query.eq('blog_id', blogId)
+    }
+
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Posts table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Post not found' })
+
+    res.json(toBlogPost(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.post('/posts', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const blogId = req.body.blogId ?? req.body.blog_id
+    const title = String(req.body.title ?? '').trim()
+    const slug = normalizeStoreSlug(req.body.slug ?? title)
+    const isPublished = Boolean(req.body.isPublished ?? req.body.is_published)
+
+    if (!blogId) return res.status(400).json({ message: 'blogId is required' })
+    if (!title) return res.status(400).json({ message: 'Post title is required' })
+    if (!slug) return res.status(400).json({ message: 'Post slug is required' })
+
+    const { data, error } = await supabase
+      .from('posts')
+      .insert([
+        {
+          store_id: storeId,
+          blog_id: blogId,
+          title,
+          slug,
+          excerpt: req.body.excerpt ?? '',
+          content: req.body.content ?? '',
+          featured_image: req.body.featuredImage ?? req.body.featured_image ?? '',
+          tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+          is_published: isPublished,
+          published_at: isPublished ? req.body.publishedAt ?? req.body.published_at ?? new Date().toISOString() : null,
+        },
+      ])
+      .select()
+      .single()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'Post slug already exists' })
+    }
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Posts table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.status(201).json(toBlogPost(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.put('/posts/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const update = {}
+
+    if (req.body.title !== undefined) {
+      const title = String(req.body.title ?? '').trim()
+      if (!title) return res.status(400).json({ message: 'Post title is required' })
+      update.title = title
+    }
+    if (req.body.slug !== undefined) {
+      const slug = normalizeStoreSlug(req.body.slug)
+      if (!slug) return res.status(400).json({ message: 'Post slug is required' })
+      update.slug = slug
+    }
+    if (req.body.excerpt !== undefined) update.excerpt = req.body.excerpt
+    if (req.body.content !== undefined) update.content = req.body.content
+    if (req.body.featuredImage !== undefined || req.body.featured_image !== undefined) {
+      update.featured_image = req.body.featuredImage ?? req.body.featured_image
+    }
+    if (req.body.tags !== undefined) update.tags = Array.isArray(req.body.tags) ? req.body.tags : []
+    if (req.body.isPublished !== undefined || req.body.is_published !== undefined) {
+      const isPublished = Boolean(req.body.isPublished ?? req.body.is_published)
+      update.is_published = isPublished
+      update.published_at = isPublished ? req.body.publishedAt ?? req.body.published_at ?? new Date().toISOString() : null
+    }
+
+    let query = supabase.from('posts').update(update).eq('id', req.params.id)
+    const blogId = req.body.blogId ?? req.body.blog_id
+    const storeId = getRequestStoreId(req)
+    if (blogId) query = query.eq('blog_id', blogId)
+    if (storeId) query = query.eq('store_id', storeId)
+
+    const { data, error } = await query.select().maybeSingle()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'Post slug already exists' })
+    }
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Posts table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Post not found' })
+
+    res.json(toBlogPost(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.delete('/posts/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    let query = supabase.from('posts').delete().eq('id', req.params.id)
+    const blogId = req.query.blogId ?? req.query.blog_id
+    const storeId = req.query.storeId ?? req.query.store_id
+    if (blogId) query = query.eq('blog_id', blogId)
+    if (storeId) query = query.eq('store_id', storeId)
+
+    const { data, error } = await query.select('id').maybeSingle()
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Posts table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Post not found' })
+
+    res.json({ message: 'Post deleted successfully' })
   } catch (error) {
     sendServerError(res, error)
   }

@@ -144,6 +144,72 @@ export function deleteCategory(id) {
   })
 }
 
+export function getBlogs(storeId) {
+  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  return request(`/blogs${query}`)
+}
+
+export function createBlog(data) {
+  return request('/blogs', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function updateBlog(id, data) {
+  return request(`/blogs/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export function deleteBlog(id, storeId) {
+  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  return request(`/blogs/${id}${query}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getBlogPosts(blogId, storeId) {
+  const params = new URLSearchParams()
+  if (blogId) params.set('blogId', String(blogId))
+  if (storeId) params.set('storeId', String(storeId))
+  const query = params.toString() ? `?${params.toString()}` : ''
+  return request(`/posts${query}`)
+}
+
+export function getBlogPost(id, blogId, storeId) {
+  const params = new URLSearchParams()
+  if (blogId) params.set('blogId', String(blogId))
+  if (storeId) params.set('storeId', String(storeId))
+  const query = params.toString() ? `?${params.toString()}` : ''
+  return request(`/posts/${id}${query}`)
+}
+
+export function createBlogPost(data) {
+  return request('/posts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function updateBlogPost(id, data) {
+  return request(`/posts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export function deleteBlogPost(id, blogId, storeId) {
+  const params = new URLSearchParams()
+  if (blogId) params.set('blogId', String(blogId))
+  if (storeId) params.set('storeId', String(storeId))
+  const query = params.toString() ? `?${params.toString()}` : ''
+  return request(`/posts/${id}${query}`, {
+    method: 'DELETE',
+  })
+}
+
 export function getOrders(storeId) {
   const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
   return request(`/orders${query}`)

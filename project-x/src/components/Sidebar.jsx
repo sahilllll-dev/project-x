@@ -7,7 +7,6 @@ import { getStoresByUserId } from '../utils/api.js'
 import { getStoreDestination } from '../utils/onboarding.js'
 import { getStoreAvatarStyle, getStoreInitial } from '../utils/storeAvatar.js'
 import appsIcon from '../assets/Dashboard Icons/Apps.svg'
-import blogPostIcon from '../assets/Dashboard Icons/Blog Post.svg'
 import customersIcon from '../assets/Dashboard Icons/Customers.svg'
 import dashboardIcon from '../assets/Dashboard Icons/Dashboard.svg'
 import marketingIcon from '../assets/Dashboard Icons/Marketing.svg'
@@ -30,6 +29,13 @@ const mainMenuItems = [
       { label: 'Coupons', to: '/dashboard/coupons' },
     ],
   },
+  {
+    label: 'Content',
+    icon: pagesIcon,
+    children: [
+      { label: 'Blogs', to: '/blogs' },
+    ],
+  },
   { label: 'Customers', to: '/customers', icon: customersIcon },
   { label: 'Payments', to: '/payments', icon: paymentsIcon },
 ]
@@ -39,7 +45,6 @@ const storeMenuItems = [
   { label: 'Visual Editor', to: '/dashboard/editor', icon: pagesIcon },
   { label: 'Apps', to: '/apps', icon: appsIcon, badgeKey: 'apps' },
   { label: 'Pages', to: '/pages', icon: pagesIcon, badge: '6' },
-  { label: 'Blog Post', to: '/blog-post', icon: blogPostIcon, badge: '12' },
 ]
 
 const logoutShortcutKeys = ['b', 'y', 'e']
