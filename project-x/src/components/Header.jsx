@@ -182,12 +182,37 @@ function Header({ onMenuToggle }) {
               as="a"
               className="visit-store-button"
               href={currentStoreLink}
+              aria-label={`Visit ${currentStore.name || 'store'}`}
               rel="noreferrer"
               target="_blank"
               variant="outline"
+              title={currentStore.url || 'Visit store'}
             >
-              <span className="visit-store-button__label">Visit Store</span>
-              <span className="visit-store-button__url">{currentStore.url}</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M4.5 10.5 6 4.75h12l1.5 5.75"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.6"
+                />
+                <path
+                  d="M5.25 10.5h13.5v8.75a1 1 0 0 1-1 1H6.25a1 1 0 0 1-1-1V10.5Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinejoin="round"
+                  strokeWidth="1.6"
+                />
+                <path
+                  d="M9 20.25v-5.5h6v5.5M4.25 10.5c.3 1.25 1.2 2 2.35 2 1.1 0 1.9-.55 2.4-1.45.5.9 1.3 1.45 2.4 1.45s1.9-.55 2.4-1.45c.5.9 1.3 1.45 2.4 1.45 1.15 0 2.05-.75 2.35-2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.6"
+                />
+              </svg>
             </Button>
           </div>
         ) : null}

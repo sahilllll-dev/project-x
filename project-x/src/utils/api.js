@@ -244,7 +244,7 @@ export function deleteStore(storeId) {
 export function setDefaultStore(storeId) {
   return request(`/stores/${storeId}/default`, {
     method: 'PUT',
-  })
+  }).then((response) => response?.store ?? response)
 }
 
 export function checkStoreSlug(slug, excludeStoreId) {

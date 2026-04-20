@@ -40,8 +40,7 @@ function Stores() {
       showToast(`${store.name} is now your default store`, 'success')
     } catch (error) {
       console.error(error)
-      applyLocalDefault(store)
-      showToast(`${store.name} is now your default store`, 'success')
+      showToast(error.message || 'Failed to set default store', 'error')
     }
   }
 

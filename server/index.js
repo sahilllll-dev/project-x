@@ -1449,13 +1449,18 @@ app.put('/stores/:id/default', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
+    const storeId = req.params.id
     const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('*')
-      .eq('id', req.params.id)
+      .eq('id', storeId)
       .maybeSingle()
 
-    if (storeError) return sendInvalidData(res, storeError)
+    if (storeError) {
+      console.error('Failed to read store before setting default:', storeError)
+      return res.status(500).json({ message: 'Failed to set default store' })
+    }
+
     if (!store) return res.status(404).json({ message: 'Store not found' })
 
     const { error: clearError } = await supabase
@@ -1465,27 +1470,44 @@ app.put('/stores/:id/default', async (req, res) => {
 
     if (clearError?.code === '42703') {
       console.error('Default store column is missing. Apply 20260420_default_store.sql to persist defaults.')
-      return res.json(toStore({ ...store, is_default: true }))
+      return res.status(500).json({ message: 'Default store column is missing' })
     }
 
-    if (clearError) return sendInvalidData(res, clearError)
+    if (clearError) {
+      console.error('Failed to clear previous default stores:', clearError)
+      return res.status(500).json({ message: 'Failed to set default store' })
+    }
 
     const { data, error } = await supabase
       .from('stores')
       .update({ is_default: true })
-      .eq('id', req.params.id)
+      .eq('id', storeId)
+      .eq('owner_id', store.owner_id)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error?.code === '42703') {
       console.error('Default store column is missing. Apply 20260420_default_store.sql to persist defaults.')
-      return res.json(toStore({ ...store, is_default: true }))
+      return res.status(500).json({ message: 'Default store column is missing' })
     }
 
-    if (error) return sendInvalidData(res, error)
-    res.json(toStore(data))
+    if (error) {
+      console.error('Failed to update selected default store:', error)
+      return res.status(500).json({ message: 'Failed to set default store' })
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: 'Store not found' })
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Store set as default',
+      store: toStore(data),
+    })
   } catch (error) {
-    sendServerError(res, error)
+    console.error('Failed to set default store:', error)
+    res.status(500).json({ message: 'Failed to set default store' })
   }
 })
 
