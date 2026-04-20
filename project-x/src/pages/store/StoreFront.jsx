@@ -71,26 +71,28 @@ function StoreFront() {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
 
-  const derivedStoreUrl = useMemo(() => {
-    const slug = normalizeStoreSlug(storeName) || getStoreSlugFromHostname()
+  const storeSubdomain = useMemo(() => {
+    return normalizeStoreSlug(storeName) || getStoreSlugFromHostname()
+  }, [storeName])
 
-    if (!slug) {
+  const derivedStoreUrl = useMemo(() => {
+    if (!storeSubdomain) {
       return ''
     }
 
-    return `${slug}.projectx.com`
-  }, [storeName])
+    return `${storeSubdomain}.projectx.com`
+  }, [storeSubdomain])
 
   useEffect(() => {
     async function loadStoreFront() {
       setIsLoading(true)
 
       try {
-        if (!derivedStoreUrl) {
-          throw new Error('Store URL is required')
+        if (!storeSubdomain) {
+          throw new Error('Store subdomain is required')
         }
 
-        const matchedStore = await getStoreByUrl(derivedStoreUrl)
+        const matchedStore = await getStoreByUrl(storeSubdomain)
         setStore(matchedStore)
         console.log('Store ID:', matchedStore.id)
 
@@ -118,7 +120,7 @@ function StoreFront() {
     }
 
     loadStoreFront()
-  }, [derivedStoreUrl, storeName])
+  }, [derivedStoreUrl, storeName, storeSubdomain])
 
   function handleCheckoutFieldChange(event) {
     const { name, value } = event.target

@@ -118,6 +118,7 @@ function toStore(row) {
   }
 
   const isDraft = String(row.slug ?? '').startsWith('draft-') && !String(row.name ?? '').trim()
+  const subdomain = normalizeStoreSlug(row.subdomain ?? row.slug)
 
   return {
     id: row.id,
@@ -126,7 +127,7 @@ function toStore(row) {
     ownerEmail: row.owner_email ?? '',
     name: row.name ?? '',
     slug: isDraft ? '' : row.slug ?? '',
-    url: isDraft ? '' : row.subdomain ?? normalizeStoreUrl(row.slug),
+    url: isDraft ? '' : normalizeStoreUrl(subdomain),
     themeId: row.theme_id ?? 'minimal',
     themeConfig: getThemeConfig(row.theme_config),
     onboardingStep: Number(row.onboarding_step) || 1,
@@ -1000,7 +1001,7 @@ app.post('/stores', async (req, res) => {
     if (!ownerId) return res.status(400).json({ message: 'userId is required' })
 
     const slug = normalizeStoreSlug(req.body.slug ?? req.body.url ?? req.body.name) || getDraftSlug()
-    const subdomain = req.body.subdomain || normalizeStoreUrl(slug)
+    const subdomain = normalizeStoreSlug(req.body.subdomain ?? slug)
 
     const { data, error } = await supabase
       .from('stores')
@@ -1043,7 +1044,7 @@ app.put('/stores/:id', async (req, res) => {
     const slug = normalizeStoreSlug(req.body.slug ?? req.body.url)
     if (slug) {
       update.slug = slug
-      update.subdomain = req.body.subdomain || normalizeStoreUrl(slug)
+      update.subdomain = normalizeStoreSlug(req.body.subdomain ?? slug)
     }
   }
   if (req.body.ownerEmail !== undefined) update.owner_email = req.body.ownerEmail
@@ -1184,10 +1185,21 @@ app.post('/store-apps/toggle', async (req, res) => {
   })
 })
 
-app.get('/store-by-url/:url', async (req, res) => {
+app.get('/store-by-url/:subdomain', async (req, res) => {
   if (!requireSupabase(res)) return
-  const slug = normalizeStoreSlug(req.params.url)
-  const { data, error } = await supabase.from('stores').select('*').eq('slug', slug).maybeSingle()
+
+  const subdomain = normalizeStoreSlug(req.params.subdomain)
+  console.log('Incoming subdomain:', subdomain)
+
+  if (!subdomain) return res.status(400).json({ message: 'Invalid subdomain' })
+
+  const fullSubdomain = normalizeStoreUrl(subdomain)
+  const { data, error } = await supabase
+    .from('stores')
+    .select('*')
+    .or(`subdomain.eq.${subdomain},subdomain.eq.${fullSubdomain},slug.eq.${subdomain}`)
+    .maybeSingle()
+
   if (error) return res.status(500).json({ error })
   if (!data) return res.status(404).json({ message: 'Store not found' })
   res.json(toStore(data))

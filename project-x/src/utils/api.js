@@ -237,8 +237,8 @@ export function checkStoreSlug(slug, excludeStoreId) {
   return request(`/store/check-slug?${params.toString()}`)
 }
 
-export function getStoreByUrl(url) {
-  return request(`/store-by-url/${encodeURIComponent(url)}`)
+export function getStoreByUrl(subdomain) {
+  return request(`/store-by-url/${encodeURIComponent(subdomain)}`)
 }
 
 export function getThemes() {
