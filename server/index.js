@@ -87,6 +87,37 @@ function requireSupabase(res) {
   return true
 }
 
+function getRequestStoreId(req) {
+  return req.query.storeId ?? req.query.store_id ?? req.body?.storeId ?? req.body?.store_id
+}
+
+function requireStoreId(req, res) {
+  const storeId = getRequestStoreId(req)
+
+  if (!storeId) {
+    res.status(400).json({ message: 'storeId is required' })
+    return null
+  }
+
+  return storeId
+}
+
+function sendInvalidData(res, error) {
+  if (error) {
+    console.error('Invalid data:', error)
+  }
+
+  return res.status(400).json({ message: 'Invalid data' })
+}
+
+function sendServerError(res, error) {
+  if (error) {
+    console.error('Server error:', error)
+  }
+
+  return res.status(500).json({ message: 'Something went wrong' })
+}
+
 function normalizeStoreSlug(value) {
   return String(value ?? '')
     .trim()
@@ -416,6 +447,7 @@ async function upsertCustomerForOrder(order) {
         total_spent: Number(existingCustomer.total_spent || 0) + Number(order.totalAmount || 0),
       })
       .eq('id', existingCustomer.id)
+      .eq('store_id', order.storeId)
       .select()
       .single()
 
@@ -515,20 +547,20 @@ app.get('/products', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
-    const storeId = req.query.storeId ?? req.query.store_id
-    let query = supabase.from('products').select('*').order('created_at', { ascending: false })
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
 
-    if (storeId) {
-      query = query.eq('store_id', storeId)
-    }
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false })
 
-    const { data, error } = await query
-
-    if (error) return res.status(500).json({ error })
+    if (error) return sendInvalidData(res, error)
 
     res.json(data.map(toProduct))
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
@@ -537,16 +569,12 @@ app.get('/product/:slug', async (req, res) => {
 
   try {
     const slug = req.params.slug
-    const storeId = req.query.storeId ?? req.query.store_id
-    let query = supabase.from('products').select('*')
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
 
-    if (storeId) {
-      query = query.eq('store_id', storeId)
-    }
+    const { data, error } = await supabase.from('products').select('*').eq('store_id', storeId)
 
-    const { data, error } = await query
-
-    if (error) return res.status(500).json({ error })
+    if (error) return sendInvalidData(res, error)
 
     const product = data.map(toProduct).find((entry) => {
       const seo = getDefaultProductSeo(entry)
@@ -557,7 +585,7 @@ app.get('/product/:slug', async (req, res) => {
 
     res.json(product)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
@@ -565,7 +593,10 @@ app.post('/products', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
-    const store = await getStoreById(req.body.storeId ?? req.body.store_id)
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const store = await getStoreById(storeId)
 
     if (!store) return res.status(400).json({ message: 'storeId is required' })
 
@@ -597,11 +628,11 @@ app.post('/products', async (req, res) => {
       .select()
       .single()
 
-    if (error) return res.status(500).json({ error })
+    if (error) return sendInvalidData(res, error)
 
     res.status(201).json(toProduct(data))
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
@@ -609,6 +640,9 @@ app.put('/products/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
     const update = {}
     if (req.body.title !== undefined) update.title = req.body.title
     if (req.body.description !== undefined) update.description = req.body.description
@@ -629,22 +663,34 @@ app.put('/products/:id', async (req, res) => {
       .from('products')
       .update(update)
       .eq('id', req.params.id)
+      .eq('store_id', storeId)
       .select()
-      .single()
+      .maybeSingle()
 
-    if (error) return res.status(500).json({ error })
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Product not found' })
 
     res.json(toProduct(data))
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
 app.delete('/products/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const { error } = await supabase.from('products').delete().eq('id', req.params.id)
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data, error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('store_id', storeId)
+    .select('id')
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
+  if (!data) return res.status(404).json({ message: 'Product not found' })
   res.json({ message: 'Product deleted successfully' })
 })
 
@@ -652,6 +698,9 @@ app.post('/coupons', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
     const code = normalizeCouponCode(req.body.code)
     const expiresAt = normalizeCouponExpiresAt(req.body, { required: true })
     if (!code) return res.status(400).json({ message: 'Coupon code is required' })
@@ -664,7 +713,7 @@ app.post('/coupons', async (req, res) => {
       .from('coupons')
       .insert([
         {
-          store_id: req.body.storeId ?? req.body.store_id,
+          store_id: storeId,
           code,
           type: req.body.type,
           value: Number(req.body.value),
@@ -680,24 +729,31 @@ app.post('/coupons', async (req, res) => {
 
     if (error) {
       if (error.code === '23505') return res.status(400).json({ message: 'Coupon code already exists' })
-      return res.status(500).json({ error })
+      return sendInvalidData(res, error)
     }
 
     res.status(201).json(toCoupon(data))
   } catch (error) {
-    const status = error.message === 'Invalid date format. Use YYYY-MM-DD' ? 400 : 500
-    res.status(status).json({ message: error.message })
+    if (error.message === 'Invalid date format. Use YYYY-MM-DD') {
+      return res.status(400).json({ message: error.message })
+    }
+
+    return sendServerError(res, error)
   }
 })
 
 app.get('/coupons', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const storeId = req.query.storeId ?? req.query.store_id
-  let query = supabase.from('coupons').select('*').order('created_at', { ascending: false })
-  if (storeId) query = query.eq('store_id', storeId)
-  const { data, error } = await query
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false })
+  if (error) return sendInvalidData(res, error)
   res.json(data.map(toCoupon))
 })
 
@@ -705,8 +761,11 @@ app.get('/coupons/:code', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
     const validation = await validateCouponForOrder({
-      storeId: req.query.storeId ?? req.query.store_id,
+      storeId,
       code: req.params.code,
       orderAmount: Number(req.query.orderAmount) || 0,
     })
@@ -719,7 +778,7 @@ app.get('/coupons/:code', async (req, res) => {
       finalAmount: validation.finalAmount,
     })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
@@ -727,6 +786,9 @@ app.put('/coupons/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
     const update = {}
     const expiresAt = normalizeCouponExpiresAt(req.body)
     if (req.body.code !== undefined) update.code = normalizeCouponCode(req.body.code)
@@ -738,41 +800,71 @@ app.put('/coupons/:id', async (req, res) => {
     if (expiresAt !== undefined) update.expires_at = expiresAt
     if (req.body.isActive !== undefined) update.is_active = Boolean(req.body.isActive)
 
-    const { data, error } = await supabase.from('coupons').update(update).eq('id', req.params.id).select().single()
-    if (error) return res.status(500).json({ error })
+    const { data, error } = await supabase
+      .from('coupons')
+      .update(update)
+      .eq('id', req.params.id)
+      .eq('store_id', storeId)
+      .select()
+      .maybeSingle()
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Coupon not found' })
     res.json(toCoupon(data))
   } catch (error) {
-    const status = error.message === 'Invalid date format. Use YYYY-MM-DD' ? 400 : 500
-    res.status(status).json({ message: error.message })
+    if (error.message === 'Invalid date format. Use YYYY-MM-DD') {
+      return res.status(400).json({ message: error.message })
+    }
+
+    return sendServerError(res, error)
   }
 })
 
 app.delete('/coupons/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const { error } = await supabase.from('coupons').delete().eq('id', req.params.id)
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data, error } = await supabase
+    .from('coupons')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('store_id', storeId)
+    .select('id')
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
+  if (!data) return res.status(404).json({ message: 'Coupon not found' })
   res.json({ message: 'Coupon deleted successfully' })
 })
 
 app.get('/orders', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const storeId = req.query.storeId ?? req.query.store_id
-  let query = supabase.from('orders').select('*').order('created_at', { ascending: false })
-  if (storeId) query = query.eq('store_id', storeId)
-  const { data, error } = await query
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false })
+  if (error) return sendInvalidData(res, error)
   res.json(data.map(toOrder))
 })
 
 app.get('/orders/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  let query = supabase.from('orders').select('*').eq('id', req.params.id)
-  if (req.query.storeId ?? req.query.store_id) query = query.eq('store_id', req.query.storeId ?? req.query.store_id)
-  const { data: order, error } = await query.maybeSingle()
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data: order, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', req.params.id)
+    .eq('store_id', storeId)
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
   if (!order) return res.status(404).json({ message: 'Order not found' })
 
   const { data: timeline, error: timelineError } = await supabase
@@ -780,7 +872,7 @@ app.get('/orders/:id', async (req, res) => {
     .select('*')
     .eq('order_id', req.params.id)
     .order('created_at')
-  if (timelineError) return res.status(500).json({ error: timelineError })
+  if (timelineError) return sendInvalidData(res, timelineError)
 
   res.json({ ...toOrder(order), timeline: timeline.map(toTimeline) })
 })
@@ -789,7 +881,10 @@ app.post('/orders', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
-    const store = await getStoreById(req.body.storeId ?? req.body.store_id)
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const store = await getStoreById(storeId)
     if (!store) return res.status(400).json({ message: 'storeId is required' })
 
     const products = Array.isArray(req.body.products) ? req.body.products : []
@@ -819,6 +914,7 @@ app.post('/orders', async (req, res) => {
         .from('products')
         .select('quantity, low_stock_threshold')
         .eq('id', orderProduct.productId)
+        .eq('store_id', store.id)
         .maybeSingle()
 
       if (product) {
@@ -826,6 +922,7 @@ app.post('/orders', async (req, res) => {
           .from('products')
           .update({ quantity: Math.max(0, Number(product.quantity || 0) - (Number(orderProduct.quantity) || 1)) })
           .eq('id', orderProduct.productId)
+          .eq('store_id', store.id)
       }
     }
 
@@ -862,12 +959,12 @@ app.post('/orders', async (req, res) => {
       .select()
       .single()
 
-    if (error) return res.status(500).json({ error })
+    if (error) return sendInvalidData(res, error)
 
     const order = toOrder(data)
     const customer = await upsertCustomerForOrder(order)
     if (customer) {
-      await supabase.from('orders').update({ customer_id: customer.id }).eq('id', order.id)
+      await supabase.from('orders').update({ customer_id: customer.id }).eq('id', order.id).eq('store_id', store.id)
       order.customerId = customer.id
     }
 
@@ -893,12 +990,15 @@ app.post('/orders', async (req, res) => {
     notifyNewOrder(order)
     res.status(201).json(order)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
 app.post('/orders/:id/pay', async (req, res) => {
   if (!requireSupabase(res)) return
+
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
 
   if (!['cod', 'online'].includes(req.body.method)) return res.status(400).json({ message: 'Invalid payment method' })
   const paymentStatus = req.body.method === 'online' ? 'paid' : 'pending'
@@ -906,9 +1006,11 @@ app.post('/orders/:id/pay', async (req, res) => {
     .from('orders')
     .update({ payment_method: req.body.method, payment_status: paymentStatus })
     .eq('id', req.params.id)
+    .eq('store_id', storeId)
     .select()
-    .single()
-  if (error) return res.status(500).json({ error })
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
+  if (!data) return res.status(404).json({ message: 'Order not found' })
   if (paymentStatus === 'paid') await createOrderTimelineEntry(req.params.id, 'paid', 'Payment received')
   const { data: timeline } = await supabase.from('order_timeline').select('*').eq('order_id', req.params.id).order('created_at')
   res.json({ ...toOrder(data), timeline: (timeline ?? []).map(toTimeline) })
@@ -917,15 +1019,25 @@ app.post('/orders/:id/pay', async (req, res) => {
 app.patch('/orders/:id/status', async (req, res) => {
   if (!requireSupabase(res)) return
 
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
   const update = {}
   if (req.body.paymentStatus) update.payment_status = req.body.paymentStatus
   if (req.body.fulfillmentStatus) update.fulfillment_status = req.body.fulfillmentStatus
   if (req.body.orderStatus) update.order_status = req.body.orderStatus
 
-  const { data, error } = await supabase.from('orders').update(update).eq('id', req.params.id).select().single()
-  if (error) return res.status(500).json({ error })
+  const { data, error } = await supabase
+    .from('orders')
+    .update(update)
+    .eq('id', req.params.id)
+    .eq('store_id', storeId)
+    .select()
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
+  if (!data) return res.status(404).json({ message: 'Order not found' })
 
-  for (const status of Object.values(req.body)) {
+  for (const status of [req.body.paymentStatus, req.body.fulfillmentStatus, req.body.orderStatus].filter(Boolean)) {
     await createOrderTimelineEntry(req.params.id, status, `Status updated to ${status}`)
   }
 
@@ -936,22 +1048,29 @@ app.patch('/orders/:id/status', async (req, res) => {
 app.get('/customers', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const storeId = req.query.storeId ?? req.query.store_id
-  let query = supabase.from('customers').select('*').order('created_at', { ascending: false })
-  if (storeId) query = query.eq('store_id', storeId)
-  const { data, error } = await query
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false })
+  if (error) return sendInvalidData(res, error)
   res.json(data.map(toCustomer))
 })
 
 app.post('/customers', async (req, res) => {
   if (!requireSupabase(res)) return
 
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
   const { data, error } = await supabase
     .from('customers')
     .insert([
       {
-        store_id: req.body.storeId ?? req.body.store_id,
+        store_id: storeId,
         name: req.body.name ?? '',
         email: req.body.email ?? '',
         phone: req.body.phone ?? '',
@@ -961,27 +1080,44 @@ app.post('/customers', async (req, res) => {
     ])
     .select()
     .single()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.status(201).json(toCustomer(data))
 })
 
 app.get('/customers/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  let query = supabase.from('customers').select('*').eq('id', req.params.id)
-  if (req.query.storeId ?? req.query.store_id) query = query.eq('store_id', req.query.storeId ?? req.query.store_id)
-  const { data: customer, error } = await query.maybeSingle()
-  if (error) return res.status(500).json({ error })
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data: customer, error } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('id', req.params.id)
+    .eq('store_id', storeId)
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
   if (!customer) return res.status(404).json({ message: 'Customer not found' })
   const { data: orders, error: ordersError } = await supabase.from('orders').select('*').eq('store_id', customer.store_id).eq('customer_id', customer.id)
-  if (ordersError) return res.status(500).json({ error: ordersError })
+  if (ordersError) return sendInvalidData(res, ordersError)
   res.json({ ...toCustomer(customer), orders: orders.map(toOrder) })
 })
 
 app.delete('/customers/:id', async (req, res) => {
   if (!requireSupabase(res)) return
-  const { error } = await supabase.from('customers').delete().eq('id', req.params.id)
-  if (error) return res.status(500).json({ error })
+
+  const storeId = requireStoreId(req, res)
+  if (!storeId) return
+
+  const { data, error } = await supabase
+    .from('customers')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('store_id', storeId)
+    .select('id')
+    .maybeSingle()
+  if (error) return sendInvalidData(res, error)
+  if (!data) return res.status(404).json({ message: 'Customer not found' })
   res.json({ message: 'Customer deleted successfully' })
 })
 
@@ -989,7 +1125,7 @@ app.get('/stores', async (req, res) => {
   if (!requireSupabase(res)) return
 
   const { data, error } = await supabase.from('stores').select('*').order('created_at', { ascending: false })
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json(data.map(toStore))
 })
 
@@ -1031,12 +1167,12 @@ app.post('/stores', async (req, res) => {
 
     if (error) {
       if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
-      return res.status(500).json({ error })
+      return sendInvalidData(res, error)
     }
 
     res.status(201).json(toStore(data))
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
@@ -1066,7 +1202,7 @@ app.put('/stores/:id', async (req, res) => {
   const { data, error } = await supabase.from('stores').update(update).eq('id', req.params.id).select().single()
   if (error) {
     if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
-    return res.status(500).json({ error })
+    return sendInvalidData(res, error)
   }
   res.json(toStore(data))
 })
@@ -1075,7 +1211,7 @@ app.get('/stores/detail/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
   const { data, error } = await supabase.from('stores').select('*').eq('id', req.params.id).maybeSingle()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   if (!data) return res.status(404).json({ message: 'Store not found' })
   res.json(toStore(data))
 })
@@ -1083,7 +1219,7 @@ app.get('/stores/detail/:id', async (req, res) => {
 app.delete('/stores/:id', async (req, res) => {
   if (!requireSupabase(res)) return
   const { error } = await supabase.from('stores').delete().eq('id', req.params.id)
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json({ message: 'Store deleted successfully' })
 })
 
@@ -1095,7 +1231,7 @@ app.put('/stores/:id/theme', async (req, res) => {
   }
 
   const { data, error } = await supabase.from('stores').update({ theme_id: req.body.themeId }).eq('id', req.params.id).select().single()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json(toStore(data))
 })
 
@@ -1107,14 +1243,14 @@ app.put('/stores/:id/theme-config', async (req, res) => {
     .eq('id', req.params.id)
     .select()
     .single()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json(toStore(data))
 })
 
 app.get('/stores/:userId', async (req, res) => {
   if (!requireSupabase(res)) return
   const { data, error } = await supabase.from('stores').select('*').eq('owner_id', req.params.userId).order('created_at', { ascending: false })
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json(data.map(toStore))
 })
 
@@ -1140,10 +1276,10 @@ app.get('/store/check-slug', async (req, res) => {
       .or(`slug.eq.${slug},slug.eq.${subdomain},subdomain.eq.${slug},subdomain.eq.${subdomain},subdomain.eq.${fullSubdomain}`)
     if (req.query.excludeStoreId) query = query.neq('id', req.query.excludeStoreId)
     const { data, error } = await query.maybeSingle()
-    if (error) return res.status(500).json({ available: false, error: 'Error checking slug' })
+    if (error) return sendInvalidData(res, error)
     res.json({ available: !data })
-  } catch {
-    res.status(500).json({ available: false, error: 'Server error' })
+  } catch (error) {
+    sendServerError(res, error)
   }
 })
 
@@ -1154,7 +1290,7 @@ app.get('/apps', (req, res) => {
 app.get('/store-apps/:storeId', async (req, res) => {
   if (!requireSupabase(res)) return
   const { data, error } = await supabase.from('store_apps').select('*').eq('store_id', req.params.storeId)
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json(
     data.map((storeApp) => ({
       id: storeApp.id,
@@ -1177,7 +1313,7 @@ app.post('/store-apps/install', async (req, res) => {
     .upsert([{ store_id: storeId, app_id: appId, enabled: true }], { onConflict: 'store_id,app_id' })
     .select()
     .single()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.status(201).json({
     id: data.id,
     storeId: data.store_id,
@@ -1198,7 +1334,7 @@ app.post('/store-apps/toggle', async (req, res) => {
     .eq('app_id', appId)
     .select()
     .single()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json({
     id: data.id,
     storeId: data.store_id,
@@ -1211,20 +1347,18 @@ app.post('/store-apps/toggle', async (req, res) => {
 app.get('/store-by-url/:subdomain', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const subdomain = normalizeStoreSlug(req.params.subdomain)
+  const subdomain = normalizeStoreSubdomain(req.params.subdomain)
   console.log('Incoming:', subdomain)
 
   if (!subdomain) return res.status(400).json({ message: 'Invalid subdomain' })
 
-  const fullSubdomain = normalizeStoreUrl(subdomain)
-  const compactSubdomain = normalizeStoreSubdomain(subdomain)
   const { data, error } = await supabase
     .from('stores')
     .select('*')
-    .or(`subdomain.eq.${subdomain},subdomain.eq.${compactSubdomain},subdomain.eq.${fullSubdomain},slug.eq.${subdomain},slug.eq.${compactSubdomain}`)
+    .eq('subdomain', subdomain)
     .maybeSingle()
 
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   if (!data) return res.status(404).json({ message: 'Store not found' })
   res.json(toStore(data))
 })
@@ -1236,17 +1370,17 @@ app.post('/login', async (req, res) => {
       email: req.body.email,
       password: req.body.password,
     })
-    if (error) return res.status(401).json({ message: error.message })
+    if (error) return res.status(401).json({ message: 'Invalid credentials' })
     res.json({ message: 'Login successful', user: data.user, session: data.session })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    sendServerError(res, error)
   }
 })
 
 app.get('/users', async (req, res) => {
   if (!requireSupabase(res)) return
   const { data, error } = await supabase.auth.admin.listUsers()
-  if (error) return res.status(500).json({ error })
+  if (error) return sendInvalidData(res, error)
   res.json(data.users.map((user) => ({ id: user.id, email: user.email, isVerified: Boolean(user.email_confirmed_at) })))
 })
 

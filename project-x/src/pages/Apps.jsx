@@ -60,7 +60,7 @@ function Apps() {
       showToast('App installed successfully', 'success')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setPendingAppId('')
     }
@@ -84,7 +84,7 @@ function Apps() {
     } catch (error) {
       console.error(error)
       refreshStoreApps()
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setPendingAppId('')
     }

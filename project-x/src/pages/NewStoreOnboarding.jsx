@@ -21,14 +21,6 @@ function normalizeSlug(value) {
     .replace(/[^a-z0-9-]/g, '')
 }
 
-function parseApiError(error) {
-  try {
-    return JSON.parse(error.message)?.message || error.message
-  } catch {
-    return error.message
-  }
-}
-
 function OnboardingLayout({ children, showBackButton, title }) {
   const navigate = useNavigate()
   const steps = ['Store Settings', 'Add Products', 'Sell Online']
@@ -79,7 +71,7 @@ function OnboardingLayout({ children, showBackButton, title }) {
 
 function NewStoreOnboarding() {
   const navigate = useNavigate()
-  const { currentUser, setCurrentStore } = useAppContext()
+  const { currentUser, setCurrentStore, setStores, stores } = useAppContext()
   const { showToast } = useToast()
   const [formData, setFormData] = useState(initialFormData)
   const [isSlugEdited, setIsSlugEdited] = useState(false)
@@ -87,7 +79,8 @@ function NewStoreOnboarding() {
   const [slugError, setSlugError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [storeCount, setStoreCount] = useState(null)
-  const isNewUser = storeCount === 0
+  const resolvedStoreCount = stores.length > 0 ? stores.length : storeCount
+  const isNewUser = resolvedStoreCount === 0
   const isValid = Boolean(formData.name.trim() && formData.slug.trim() && isSlugAvailable === true)
 
   useEffect(() => {
@@ -95,7 +88,7 @@ function NewStoreOnboarding() {
   }, [setCurrentStore])
 
   useEffect(() => {
-    if (!currentUser?.id) {
+    if (!currentUser?.id || stores.length > 0) {
       return
     }
 
@@ -110,7 +103,7 @@ function NewStoreOnboarding() {
     }
 
     loadStoreCount()
-  }, [currentUser?.id])
+  }, [currentUser?.id, stores.length])
 
   useEffect(() => {
     const slug = normalizeSlug(formData.slug)
@@ -179,18 +172,27 @@ function NewStoreOnboarding() {
     }))
   }
 
-  async function handleCreateStore(event) {
-    event.preventDefault()
-
+  async function handleCreateStore() {
     const name = formData.name.trim()
     const slug = normalizeSlug(formData.slug)
 
-    if (!name || !slug) {
-      showToast('Please fill all required fields', 'error')
+    if (!name) {
+      showToast('Store name is required', 'error')
       return
     }
 
-    if (!currentUser?.id || isSlugAvailable !== true) {
+    if (!slug) {
+      showToast('Store URL is required', 'error')
+      return
+    }
+
+    if (isSlugAvailable !== true) {
+      showToast(slugError || 'Please choose an available Store URL', 'error')
+      return
+    }
+
+    if (!currentUser?.id) {
+      showToast('Please sign in to create a store', 'error')
       return
     }
 
@@ -212,11 +214,12 @@ function NewStoreOnboarding() {
     try {
       const nextStore = await createStore(payload)
       setCurrentStore(nextStore)
+      setStores((currentStores) => [...currentStores, nextStore])
       showToast('Store created successfully', 'success')
-      navigate(`/onboarding/${nextStore.id}`)
+      navigate('/dashboard')
     } catch (error) {
       console.error(error)
-      const message = parseApiError(error) || 'Something went wrong, please try again'
+      const message = error.message || 'Something went wrong'
       if (message === 'Store Temporary URL already used') {
         setIsSlugAvailable(false)
         setSlugError(message)
@@ -229,10 +232,10 @@ function NewStoreOnboarding() {
 
   return (
     <OnboardingLayout
-      showBackButton={!isNewUser && storeCount !== null}
+      showBackButton={resolvedStoreCount > 0}
       title={isNewUser ? 'Create Your First Store' : 'Add New Store'}
     >
-      <SurfaceCard as="form" className="form-card" onSubmit={handleCreateStore}>
+      <SurfaceCard className="form-card">
         <div className="form-field">
           <label htmlFor="new-store-name">Store Name*</label>
           <input
@@ -301,7 +304,8 @@ function NewStoreOnboarding() {
           className="dashboard-create-button"
           disabled={!isValid || isSubmitting}
           fullWidth
-          type="submit"
+          type="button"
+          onClick={handleCreateStore}
         >
           {isSubmitting ? 'Creating...' : 'Create Store'}
         </Button>

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
+import { useStore } from '../context/StoreContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { deleteStore, getStoresByUserId } from '../utils/api.js'
 import { getStoreDestination } from '../utils/onboarding.js'
@@ -10,36 +11,41 @@ import { getStoreAvatarStyle, getStoreInitial } from '../utils/storeAvatar.js'
 
 function Stores() {
   const navigate = useNavigate()
-  const { currentUser, currentStore, setCurrentStore } = useAppContext()
+  const { currentUser } = useAppContext()
+  const { currentStore, setCurrentStore, stores, setStores } = useStore()
   const { showToast } = useToast()
-  const [stores, setStores] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [deletingStoreId, setDeletingStoreId] = useState(null)
+  const userId = currentUser?.id
 
   function handleSelectStore(store) {
     setCurrentStore(store)
     navigate(getStoreDestination(store))
   }
 
-  async function fetchStores() {
-    if (!currentUser?.id) {
+  const fetchStores = useCallback(async () => {
+    if (!userId) {
       setStores([])
       setIsLoading(false)
       return
     }
 
     try {
-      setStores(await getStoresByUserId(currentUser.id))
+      setStores(await getStoresByUserId(userId))
     } catch (error) {
       console.error(error)
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [setStores, userId])
 
   useEffect(() => {
-    fetchStores()
-  }, [currentUser?.id])
+    const timerId = window.setTimeout(fetchStores, 0)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [fetchStores])
 
   function handleAddNewStore() {
     setCurrentStore(null)
@@ -61,7 +67,7 @@ function Stores() {
       fetchStores()
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setDeletingStoreId(null)
     }

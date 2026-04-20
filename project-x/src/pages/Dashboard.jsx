@@ -255,7 +255,7 @@ function Dashboard() {
         console.error(error)
         setIsUrlAvailable(false)
         setStoreUrlError('Unable to verify URL')
-        showToast('Something went wrong, please try again', 'error')
+        showToast(error.message || 'Something went wrong', 'error')
       }
     }
 
@@ -354,14 +354,7 @@ function Dashboard() {
       setActiveStep('add-products')
     } catch (error) {
       console.error(error)
-      const parsedError = (() => {
-        try {
-          return JSON.parse(error.message)
-        } catch {
-          return null
-        }
-      })()
-      const message = parsedError?.message || error.message || 'Something went wrong, please try again'
+      const message = error.message || 'Something went wrong'
 
       if (message === 'Store Temporary URL already used') {
         setIsUrlAvailable(false)
@@ -383,7 +376,7 @@ function Dashboard() {
       return nextStore
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
       return null
     }
   }
@@ -407,7 +400,7 @@ function Dashboard() {
       navigate('/dashboard')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     }
   }
 

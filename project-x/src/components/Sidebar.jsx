@@ -1,6 +1,7 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { AppContext, useAppContext } from '../context/AppContext.jsx'
+import { useAppContext } from '../context/AppContext.jsx'
+import { useStore } from '../context/StoreContext.jsx'
 import { logoutUser } from '../utils/auth.js'
 import { getStoresByUserId } from '../utils/api.js'
 import { getStoreDestination } from '../utils/onboarding.js'
@@ -55,11 +56,10 @@ function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const dropdownRef = useRef(null)
-  const { currentStore, storeApps } = useContext(AppContext)
-  const { currentUser, setCurrentStore, clearAppContext } = useAppContext()
+  const { currentUser, storeApps, clearAppContext } = useAppContext()
+  const { currentStore, setCurrentStore, stores, setStores } = useStore()
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false)
   const [openMenuKey, setOpenMenuKey] = useState('')
-  const [stores, setStores] = useState([])
   const hasStore = Boolean(currentStore?.name)
   const storeTitle = hasStore ? currentStore.name : 'Create Store'
   const storeInitial = hasStore ? getStoreInitial(currentStore) : 'S'
@@ -85,7 +85,7 @@ function Sidebar() {
     if (isStoreMenuOpen) {
       loadStores()
     }
-  }, [currentUser?.id, isStoreMenuOpen])
+  }, [currentUser?.id, isStoreMenuOpen, setStores])
 
   useEffect(() => {
     function handleClickOutside(event) {

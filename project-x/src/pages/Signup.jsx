@@ -17,7 +17,7 @@ function Signup() {
 
     if (!email.trim() || !password.trim()) {
       setErrorMessage('Email and password are required')
-      showToast('Something went wrong, please try again', 'error')
+      showToast('Email and password are required', 'error')
       return
     }
 
@@ -38,7 +38,7 @@ function Signup() {
       setPassword('')
     } catch (error) {
       setErrorMessage(error.message || 'Signup failed')
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsSubmitting(false)
     }

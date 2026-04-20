@@ -1,9 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { getOrders, getStoreApps, getStoresByUserId } from '../utils/api.js'
-import { getThemeConfig } from '../utils/themeConfig.js'
+import { useStore } from './StoreContext.jsx'
 
 const CURRENT_USER_STORAGE_KEY = 'currentUser'
-const CURRENT_STORE_STORAGE_KEY = 'currentStore'
 const STORE_APPS_STORAGE_KEY = 'storeApps'
 const STORE_NOTIFICATION_STORAGE_KEY = 'storeNotifications'
 const NEW_ORDER_EVENT = 'projectx:new-order'
@@ -11,12 +10,15 @@ const NEW_ORDER_EVENT = 'projectx:new-order'
 export const AppContext = createContext({
   currentUser: null,
   currentStore: null,
+  storeSwitchVersion: 0,
+  stores: [],
   notifications: [],
   storeApps: [],
   hasUnreadNotifications: false,
   isAppReady: false,
   setCurrentUser: () => {},
   setCurrentStore: () => {},
+  setStores: () => {},
   markNotificationsAsRead: () => {},
   setStoreApps: () => {},
   refreshStoreApps: async () => [],
@@ -56,22 +58,9 @@ function writeJson(key, value) {
   window.localStorage.setItem(key, JSON.stringify(value))
 }
 
-function normalizeStore(store) {
-  if (!store) {
-    return null
-  }
-
-  return {
-    ...store,
-    themeConfig: getThemeConfig(store.themeConfig),
-    onboardingStep: Number(store.onboardingStep) || 1,
-    isOnboardingCompleted: Boolean(store.isOnboardingCompleted),
-  }
-}
-
 export function AppProvider({ children }) {
+  const { currentStore, setCurrentStore, storeSwitchVersion, stores, setStores } = useStore()
   const [currentUser, setCurrentUserState] = useState(null)
-  const [currentStore, setCurrentStoreState] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [storeApps, setStoreAppsState] = useState([])
   const [notificationMeta, setNotificationMeta] = useState({})
@@ -80,16 +69,11 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const storedUser = readJson(CURRENT_USER_STORAGE_KEY, null)
-    const storedStore = readJson(CURRENT_STORE_STORAGE_KEY, null)
     const storedStoreApps = readJson(STORE_APPS_STORAGE_KEY, [])
     const storedNotificationMeta = readJson(STORE_NOTIFICATION_STORAGE_KEY, {})
 
     if (storedUser) {
       setCurrentUserState(storedUser)
-    }
-
-    if (storedStore) {
-      setCurrentStoreState(normalizeStore(storedStore))
     }
 
     setStoreAppsState(storedStoreApps)
@@ -101,10 +85,6 @@ export function AppProvider({ children }) {
   useEffect(() => {
     writeJson(CURRENT_USER_STORAGE_KEY, currentUser)
   }, [currentUser])
-
-  useEffect(() => {
-    writeJson(CURRENT_STORE_STORAGE_KEY, currentStore)
-  }, [currentStore])
 
   useEffect(() => {
     writeJson(STORE_APPS_STORAGE_KEY, storeApps)
@@ -122,8 +102,9 @@ export function AppProvider({ children }) {
 
       try {
         const stores = await getStoresByUserId(currentUser.id)
+        setStores(stores)
         if (stores.length === 0) {
-          setCurrentStoreState(null)
+          setCurrentStore(null)
           return
         }
 
@@ -143,14 +124,14 @@ export function AppProvider({ children }) {
           return false
         })
 
-        setCurrentStoreState(normalizeStore(matchingStore ?? stores.at(-1) ?? null))
+        setCurrentStore(matchingStore ?? stores.at(-1) ?? null)
       } catch (error) {
         console.error(error)
       }
     }
 
     hydrateStore()
-  }, [currentStore?.id, currentStore?.url, currentUser?.id])
+  }, [currentStore?.id, currentStore?.url, currentUser?.id, setCurrentStore, setStores])
 
   useEffect(() => {
     if (!currentStore?.id) {
@@ -233,10 +214,6 @@ export function AppProvider({ children }) {
     setCurrentUserState(user ?? null)
   }
 
-  function setCurrentStore(store) {
-    setCurrentStoreState(normalizeStore(store))
-  }
-
   function setStoreApps(nextStoreApps) {
     setStoreAppsState(nextStoreApps ?? [])
   }
@@ -265,17 +242,17 @@ export function AppProvider({ children }) {
     writeJson(CURRENT_USER_STORAGE_KEY, nextUser)
 
     if (!nextUser?.id) {
-      setCurrentStoreState(null)
+      setCurrentStore(null)
+      setStores([])
       setStoreAppsState([])
-      writeJson(CURRENT_STORE_STORAGE_KEY, null)
       writeJson(STORE_APPS_STORAGE_KEY, [])
       return { user: nextUser, store: null }
     }
 
     const stores = await getStoresByUserId(nextUser.id)
-    const nextStore = normalizeStore(stores.at(-1) ?? null)
-    setCurrentStoreState(nextStore)
-    writeJson(CURRENT_STORE_STORAGE_KEY, nextStore)
+    setStores(stores)
+    const nextStore = stores.at(-1) ?? null
+    setCurrentStore(nextStore)
 
     const nextStoreApps = nextStore?.id ? await getStoreApps(nextStore.id) : []
     setStoreAppsState(nextStoreApps)
@@ -289,11 +266,11 @@ export function AppProvider({ children }) {
 
   function clearAppContext() {
     setCurrentUserState(null)
-    setCurrentStoreState(null)
+    setCurrentStore(null)
+    setStores([])
     setNotifications([])
     setStoreAppsState([])
     writeJson(CURRENT_USER_STORAGE_KEY, null)
-    writeJson(CURRENT_STORE_STORAGE_KEY, null)
     writeJson(STORE_APPS_STORAGE_KEY, [])
   }
 
@@ -307,12 +284,15 @@ export function AppProvider({ children }) {
       value={{
         currentUser,
         currentStore,
+        storeSwitchVersion,
+        stores,
         notifications,
         storeApps,
         hasUnreadNotifications,
         isAppReady,
         setCurrentUser,
         setCurrentStore,
+        setStores,
         setStoreApps,
         refreshStoreApps,
         isAppEnabled,

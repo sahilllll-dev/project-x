@@ -56,7 +56,7 @@ function getDateInputFromISO(value) {
 }
 
 function Coupons() {
-  const { currentStore } = useAppContext()
+  const { currentStore, storeSwitchVersion } = useAppContext()
   const { showToast } = useToast()
   const [coupons, setCoupons] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -66,24 +66,42 @@ function Coupons() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
+    let isCancelled = false
+
     async function loadCoupons() {
+      setCoupons([])
+      setIsModalOpen(false)
+      setEditingCoupon(null)
+      setFormData(initialCouponForm)
+
       if (!currentStore?.id) {
-        setCoupons([])
         setIsLoading(false)
         return
       }
 
+      setIsLoading(true)
+
       try {
-        setCoupons(await getCoupons(currentStore.id))
+        const response = await getCoupons(currentStore.id)
+        if (isCancelled) {
+          return
+        }
+        setCoupons(response)
       } catch (error) {
         console.error(error)
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
     loadCoupons()
-  }, [currentStore?.id])
+
+    return () => {
+      isCancelled = true
+    }
+  }, [currentStore?.id, storeSwitchVersion])
 
   function openCreateModal() {
     setEditingCoupon(null)
@@ -160,25 +178,25 @@ function Coupons() {
       setIsModalOpen(false)
     } catch (error) {
       console.error(error)
-      showToast(
-        error.message === 'Invalid date format. Use YYYY-MM-DD'
-          ? error.message
-          : 'Something went wrong, please try again',
-        'error',
-      )
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   async function handleDelete(couponId) {
+    if (!currentStore?.id) {
+      showToast('Select a store first', 'error')
+      return
+    }
+
     try {
-      await deleteCoupon(couponId)
+      await deleteCoupon(couponId, currentStore.id)
       setCoupons((currentCoupons) => currentCoupons.filter((coupon) => coupon.id !== couponId))
       showToast('Coupon deleted', 'success')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     }
   }
 

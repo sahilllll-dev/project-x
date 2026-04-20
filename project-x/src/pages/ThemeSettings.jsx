@@ -40,7 +40,7 @@ function ThemeSettings() {
       showToast('Theme applied successfully', 'success')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsSaving(false)
     }

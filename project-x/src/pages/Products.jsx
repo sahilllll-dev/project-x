@@ -27,7 +27,7 @@ function getProductImage(product) {
 
 function Products() {
   const navigate = useNavigate()
-  const { currentStore } = useAppContext()
+  const { currentStore, storeSwitchVersion } = useAppContext()
   const { showToast } = useToast()
   const [products, setProducts] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -37,25 +37,43 @@ function Products() {
   const [productToDelete, setProductToDelete] = useState(null)
 
   useEffect(() => {
+    let isCancelled = false
+
     async function loadProducts() {
+      setProducts([])
+      setSearchTerm('')
+      setActiveFilter('all')
+      setProductToDeactivate(null)
+      setProductToDelete(null)
+
       if (!currentStore?.id) {
-        setProducts([])
         setIsLoading(false)
         return
       }
 
+      setIsLoading(true)
+
       try {
         const response = await getProducts(currentStore.id)
+        if (isCancelled) {
+          return
+        }
         setProducts(response)
       } catch (error) {
         console.error(error)
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
     loadProducts()
-  }, [currentStore?.id])
+
+    return () => {
+      isCancelled = true
+    }
+  }, [currentStore?.id, storeSwitchVersion])
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
@@ -78,21 +96,31 @@ function Products() {
   })
 
   async function handleDelete(productId) {
+    if (!currentStore?.id) {
+      showToast('Select a store first', 'error')
+      return
+    }
+
     try {
-      await deleteProduct(productId)
+      await deleteProduct(productId, currentStore.id)
       setProducts((currentProducts) =>
         currentProducts.filter((product) => product.id !== productId),
       )
       showToast('Product deleted', 'success')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     }
   }
 
   async function applyStatusUpdate(productId, nextStatus) {
+    if (!currentStore?.id) {
+      showToast('Select a store first', 'error')
+      return
+    }
+
     try {
-      await updateProduct(productId, { status: nextStatus })
+      await updateProduct(productId, { status: nextStatus, storeId: currentStore.id })
       setProducts((currentProducts) =>
         currentProducts.map((product) =>
           product.id === productId ? { ...product, status: nextStatus } : product,
@@ -101,7 +129,7 @@ function Products() {
       showToast(nextStatus === 'active' ? 'Product activated' : 'Product deactivated', 'success')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     }
   }
 

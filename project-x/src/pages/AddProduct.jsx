@@ -352,7 +352,7 @@ function AddProduct() {
       }
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsSubmitting(false)
     }

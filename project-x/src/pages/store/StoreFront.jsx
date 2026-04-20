@@ -8,14 +8,12 @@ import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
 
-function normalizeSlug(value) {
+function normalizeSubdomain(value) {
   return String(value || '')
     .trim()
     .replace(/\.projectx\.com$/i, '')
-    .replace(/([a-z])([A-Z])/g, '$1-$2')
     .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
+    .replace(/[^a-z0-9]/g, '')
 }
 
 function getStoreSlugFromHostname() {
@@ -28,8 +26,8 @@ function getStoreSlugFromHostname() {
     return ''
   }
 
-  const slug = hostname.split('.')[0]
-  return ['www', 'app'].includes(slug) ? '' : slug
+  const subdomain = normalizeSubdomain(hostname.split('.')[0])
+  return ['www', 'app'].includes(subdomain) ? '' : subdomain
 }
 
 function formatStoreNameFromSlug(value) {
@@ -73,7 +71,7 @@ function StoreFront() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
 
   const storeSubdomain = useMemo(() => {
-    return normalizeSlug(storeName) || getStoreSlugFromHostname()
+    return normalizeSubdomain(storeName) || getStoreSlugFromHostname()
   }, [storeName])
 
   const derivedStoreUrl = useMemo(() => {
@@ -164,7 +162,7 @@ function StoreFront() {
     } catch (error) {
       console.error(error)
       setAppliedCoupon(null)
-      showToast('Invalid coupon code', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsApplyingCoupon(false)
     }
@@ -226,7 +224,7 @@ function StoreFront() {
       }, 1200)
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsPlacingOrder(false)
     }

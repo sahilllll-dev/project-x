@@ -62,7 +62,18 @@ async function request(path, options = {}) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(errorText || 'Request failed')
+      let message = 'Something went wrong'
+
+      if (errorText) {
+        try {
+          const parsedError = JSON.parse(errorText)
+          message = parsedError?.message || message
+        } catch {
+          message = errorText
+        }
+      }
+
+      throw new Error(message)
     }
 
     if (response.status === 204) {
@@ -99,8 +110,9 @@ export function updateProduct(id, data) {
   })
 }
 
-export function deleteProduct(id) {
-  return request(`/products/${id}`, {
+export function deleteProduct(id, storeId) {
+  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  return request(`/products/${id}${query}`, {
     method: 'DELETE',
   })
 }
@@ -129,10 +141,10 @@ export function updateOrderStatus(id, data) {
   })
 }
 
-export function payOrder(id, method) {
+export function payOrder(id, method, storeId) {
   return request(`/orders/${id}/pay`, {
     method: 'POST',
-    body: JSON.stringify({ method }),
+    body: JSON.stringify({ method, storeId }),
   })
 }
 
@@ -164,8 +176,9 @@ export function updateCoupon(id, data) {
   })
 }
 
-export function deleteCoupon(id) {
-  return request(`/coupons/${id}`, {
+export function deleteCoupon(id, storeId) {
+  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  return request(`/coupons/${id}${query}`, {
     method: 'DELETE',
   })
 }
@@ -187,8 +200,9 @@ export function createCustomer(data) {
   })
 }
 
-export function deleteCustomer(id) {
-  return request(`/customers/${id}`, {
+export function deleteCustomer(id, storeId) {
+  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  return request(`/customers/${id}${query}`, {
     method: 'DELETE',
   })
 }

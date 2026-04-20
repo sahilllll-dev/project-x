@@ -35,7 +35,7 @@ function formatDate(value) {
 
 function Orders() {
   const navigate = useNavigate()
-  const { currentStore, markNotificationsAsRead } = useAppContext()
+  const { currentStore, markNotificationsAsRead, storeSwitchVersion } = useAppContext()
   const [orders, setOrders] = useState([])
   const [activeFilter, setActiveFilter] = useState('all')
   const [isLoading, setIsLoading] = useState(true)
@@ -45,25 +45,40 @@ function Orders() {
   }, [markNotificationsAsRead, currentStore?.id])
 
   useEffect(() => {
+    let isCancelled = false
+
     async function loadOrders() {
+      setOrders([])
+      setActiveFilter('all')
+
       if (!currentStore?.id) {
-        setOrders([])
         setIsLoading(false)
         return
       }
 
+      setIsLoading(true)
+
       try {
         const response = await getOrders(currentStore.id)
+        if (isCancelled) {
+          return
+        }
         setOrders(response)
       } catch (error) {
         console.error(error)
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
     loadOrders()
-  }, [currentStore?.id])
+
+    return () => {
+      isCancelled = true
+    }
+  }, [currentStore?.id, storeSwitchVersion])
 
   const filteredOrders = orders.filter((order) => {
     if (activeFilter === 'all') {

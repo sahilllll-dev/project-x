@@ -57,7 +57,7 @@ function Login() {
       navigate(redirectTo)
     } catch (error) {
       setErrorMessage(error.message || 'Login failed')
-      showToast('Invalid credentials', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsSubmitting(false)
     }

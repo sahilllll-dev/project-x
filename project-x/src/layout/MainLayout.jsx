@@ -8,14 +8,15 @@ import { getStoresByUserId } from '../utils/api.js'
 function MainLayout() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { currentUser, currentStore, isAppReady } = useAppContext()
+  const { currentUser, currentStore, isAppReady, stores } = useAppContext()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [storeCount, setStoreCount] = useState(null)
   const isNewStoreFlow = location.pathname === '/onboarding/new'
   const isStoreOnboardingRoute = /^\/onboarding\/(?!new(?:\/|$))[^/]+$/.test(location.pathname)
   const isStoresRoute = location.pathname.startsWith('/stores')
-  const isNewUser = storeCount === 0
-  const showHeader = !isNewStoreFlow || storeCount > 0
+  const resolvedStoreCount = stores.length > 0 ? stores.length : storeCount
+  const isNewUser = resolvedStoreCount === 0
+  const showHeader = !isNewStoreFlow || resolvedStoreCount > 0
   const showSidebar = showHeader && Boolean(currentStore)
 
   useEffect(() => {
@@ -31,7 +32,7 @@ function MainLayout() {
   }, [currentStore, isAppReady, isNewStoreFlow, isStoreOnboardingRoute, isStoresRoute, navigate])
 
   useEffect(() => {
-    if (!currentUser?.id || !isNewStoreFlow) {
+    if (!currentUser?.id || !isNewStoreFlow || stores.length > 0) {
       return
     }
 
@@ -46,7 +47,7 @@ function MainLayout() {
     }
 
     loadStoreCount()
-  }, [currentUser?.id, isNewStoreFlow])
+  }, [currentUser?.id, isNewStoreFlow, stores.length])
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {

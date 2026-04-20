@@ -60,15 +60,20 @@ function OrderDetails() {
   }, [currentStore?.id, id])
 
   async function handleStatusChange(field, value) {
+    if (!currentStore?.id) {
+      showToast('Select a store first', 'error')
+      return
+    }
+
     setIsUpdating(true)
 
     try {
-      const nextOrder = await updateOrderStatus(id, { [field]: value })
+      const nextOrder = await updateOrderStatus(id, { [field]: value, storeId: currentStore.id })
       setOrder(nextOrder)
       showToast('Order updated', 'success')
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(error.message || 'Something went wrong', 'error')
     } finally {
       setIsUpdating(false)
     }
