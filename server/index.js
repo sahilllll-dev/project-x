@@ -147,6 +147,7 @@ function toStore(row) {
     themeConfig: getThemeConfig(row.theme_config),
     onboardingStep: Number(row.onboarding_step) || 1,
     isOnboardingCompleted: Boolean(row.is_onboarding_completed),
+    isDefault: Boolean(row.is_default),
     logoUrl: row.logo_url ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1394,6 +1395,40 @@ app.delete('/stores/:id', async (req, res) => {
   const { error } = await supabase.from('stores').delete().eq('id', req.params.id)
   if (error) return sendInvalidData(res, error)
   res.json({ message: 'Store deleted successfully' })
+})
+
+app.put('/stores/:id/default', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle()
+
+    if (storeError) return sendInvalidData(res, storeError)
+    if (!store) return res.status(404).json({ message: 'Store not found' })
+
+    const { error: clearError } = await supabase
+      .from('stores')
+      .update({ is_default: false })
+      .eq('owner_id', store.owner_id)
+
+    if (clearError) return sendInvalidData(res, clearError)
+
+    const { data, error } = await supabase
+      .from('stores')
+      .update({ is_default: true })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+    res.json(toStore(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
 })
 
 app.put('/stores/:id/theme', async (req, res) => {

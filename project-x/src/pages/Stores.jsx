@@ -5,13 +5,13 @@ import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useStore } from '../context/StoreContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { deleteStore, getStoresByUserId } from '../utils/api.js'
+import { deleteStore, getStoresByUserId, setDefaultStore as saveDefaultStore } from '../utils/api.js'
 import { getStoreDestination } from '../utils/onboarding.js'
 import { getStoreAvatarStyle, getStoreInitial } from '../utils/storeAvatar.js'
 
 function Stores() {
   const navigate = useNavigate()
-  const { currentUser } = useAppContext()
+  const { currentUser, defaultStoreId, setDefaultStore } = useAppContext()
   const { currentStore, setCurrentStore, stores, setStores } = useStore()
   const { showToast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -21,6 +21,23 @@ function Stores() {
   function handleSelectStore(store) {
     setCurrentStore(store)
     navigate(getStoreDestination(store))
+  }
+
+  async function handleMakeDefault(store) {
+    try {
+      const nextDefaultStore = await saveDefaultStore(store.id)
+      setDefaultStore(nextDefaultStore)
+      setStores((currentStores) =>
+        currentStores.map((currentStore) => ({
+          ...currentStore,
+          isDefault: currentStore.id === nextDefaultStore.id,
+        })),
+      )
+      showToast(`${store.name} is now your default store`, 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error.message || 'Something went wrong', 'error')
+    }
   }
 
   const fetchStores = useCallback(async () => {
@@ -54,13 +71,30 @@ function Stores() {
 
   async function handleDeleteStore(storeId) {
     setDeletingStoreId(storeId)
+    const deletedStore = stores.find((store) => store.id === storeId)
 
     try {
       await deleteStore(storeId)
-      setStores((currentStores) => currentStores.filter((store) => store.id !== storeId))
+      const nextStores = stores.filter((store) => store.id !== storeId)
+      setStores(nextStores)
 
       if (currentStore?.id === storeId) {
         setCurrentStore(null)
+      }
+
+      if (defaultStoreId === storeId || deletedStore?.isDefault) {
+        if (nextStores[0]) {
+          const nextDefaultStore = await saveDefaultStore(nextStores[0].id)
+          setDefaultStore(nextDefaultStore)
+          setStores((currentStores) =>
+            currentStores.map((store) => ({
+              ...store,
+              isDefault: store.id === nextDefaultStore.id,
+            })),
+          )
+        } else {
+          setDefaultStore(null)
+        }
       }
 
       showToast('Store deleted', 'success')
@@ -93,6 +127,7 @@ function Stores() {
           <div className="stores-list">
             {stores.map((store) => {
               const isActive = store.id === currentStore?.id
+              const isDefault = store.isDefault || store.id === defaultStoreId
 
               return (
                 <div className="stores-list__item" key={store.id}>
@@ -107,6 +142,13 @@ function Stores() {
                   </div>
 
                   <div className="stores-list__actions">
+                    {isDefault ? (
+                      <span className="stores-list__active">Default</span>
+                    ) : (
+                      <Button variant="outline" onClick={() => handleMakeDefault(store)}>
+                        Make Default
+                      </Button>
+                    )}
                     {isActive ? (
                       <span className="stores-list__active">Selected</span>
                     ) : (

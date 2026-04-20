@@ -47,6 +47,7 @@ create table if not exists public.stores (
   address1 text not null,
   address2 text,
   logo_url text,
+  is_default boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -115,6 +116,10 @@ create table if not exists public.store_pages (
 
 create unique index if not exists store_pages_store_slug_unique
 on public.store_pages (store_id, slug);
+
+create unique index if not exists one_default_store_per_owner
+on public.stores (owner_id)
+where is_default = true;
 
 insert into public.themes (name, code, preview_image)
 values

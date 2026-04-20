@@ -8,7 +8,7 @@ import { getStoresByUserId } from '../utils/api.js'
 function MainLayout() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { currentUser, currentStore, isAppReady, stores } = useAppContext()
+  const { currentUser, currentStore, isAppReady, isStoreReady, stores } = useAppContext()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [storeCount, setStoreCount] = useState(null)
   const isNewStoreFlow = location.pathname === '/onboarding/new'
@@ -22,14 +22,16 @@ function MainLayout() {
   useEffect(() => {
     if (
       isAppReady &&
+      isStoreReady &&
       !currentStore &&
+      stores.length === 0 &&
       !isNewStoreFlow &&
       !isStoreOnboardingRoute &&
       !isStoresRoute
     ) {
       navigate('/onboarding/new', { replace: true })
     }
-  }, [currentStore, isAppReady, isNewStoreFlow, isStoreOnboardingRoute, isStoresRoute, navigate])
+  }, [currentStore, isAppReady, isNewStoreFlow, isStoreOnboardingRoute, isStoresRoute, isStoreReady, navigate, stores.length])
 
   useEffect(() => {
     if (!currentUser?.id || !isNewStoreFlow || stores.length > 0) {

@@ -5,6 +5,7 @@ import { useStore } from './StoreContext.jsx'
 const CURRENT_USER_STORAGE_KEY = 'currentUser'
 const STORE_APPS_STORAGE_KEY = 'storeApps'
 const STORE_NOTIFICATION_STORAGE_KEY = 'storeNotifications'
+const DEFAULT_STORE_STORAGE_KEY = 'defaultStoreByUser'
 const NEW_ORDER_EVENT = 'projectx:new-order'
 
 export const AppContext = createContext({
@@ -16,9 +17,12 @@ export const AppContext = createContext({
   storeApps: [],
   hasUnreadNotifications: false,
   isAppReady: false,
+  isStoreReady: false,
+  defaultStoreId: null,
   setCurrentUser: () => {},
   setCurrentStore: () => {},
   setStores: () => {},
+  setDefaultStore: () => {},
   markNotificationsAsRead: () => {},
   setStoreApps: () => {},
   refreshStoreApps: async () => [],
@@ -58,6 +62,31 @@ function writeJson(key, value) {
   window.localStorage.setItem(key, JSON.stringify(value))
 }
 
+function readDefaultStoreId(userId) {
+  if (!userId) {
+    return null
+  }
+
+  const defaultStoreByUser = readJson(DEFAULT_STORE_STORAGE_KEY, {})
+  return defaultStoreByUser[userId] ?? null
+}
+
+function writeDefaultStoreId(userId, storeId) {
+  if (!userId) {
+    return
+  }
+
+  const defaultStoreByUser = readJson(DEFAULT_STORE_STORAGE_KEY, {})
+
+  if (!storeId) {
+    delete defaultStoreByUser[userId]
+  } else {
+    defaultStoreByUser[userId] = storeId
+  }
+
+  writeJson(DEFAULT_STORE_STORAGE_KEY, defaultStoreByUser)
+}
+
 export function AppProvider({ children }) {
   const { currentStore, setCurrentStore, storeSwitchVersion, stores, setStores } = useStore()
   const [currentUser, setCurrentUserState] = useState(null)
@@ -65,6 +94,8 @@ export function AppProvider({ children }) {
   const [storeApps, setStoreAppsState] = useState([])
   const [notificationMeta, setNotificationMeta] = useState({})
   const [isAppReady, setIsAppReady] = useState(false)
+  const [isStoreReady, setIsStoreReady] = useState(false)
+  const [defaultStoreId, setDefaultStoreId] = useState(null)
   const latestOrderTimestampRef = useRef({})
 
   useEffect(() => {
@@ -95,43 +126,66 @@ export function AppProvider({ children }) {
   }, [notificationMeta])
 
   useEffect(() => {
+    let isCancelled = false
+
     async function hydrateStore() {
-      if (!currentUser?.id) {
+      if (!isAppReady) {
         return
       }
 
+      if (!currentUser?.id) {
+        setStores([])
+        setCurrentStore(null)
+        setDefaultStoreId(null)
+        setIsStoreReady(true)
+        return
+      }
+
+      setIsStoreReady(false)
+
       try {
-        const stores = await getStoresByUserId(currentUser.id)
-        setStores(stores)
-        if (stores.length === 0) {
+        const nextStores = await getStoresByUserId(currentUser.id)
+
+        if (isCancelled) {
+          return
+        }
+
+        setStores(nextStores)
+
+        if (nextStores.length === 0) {
           setCurrentStore(null)
+          setDefaultStoreId(null)
           return
         }
 
-        if (!currentStore?.id && !currentStore?.url) {
-          return
+        const storedDefaultStoreId = readDefaultStoreId(currentUser.id)
+        const defaultStore =
+          nextStores.find((store) => store.isDefault) ??
+          nextStores.find((store) => store.id === storedDefaultStoreId)
+        const nextStore = defaultStore ?? nextStores[0]
+
+        setCurrentStore(nextStore)
+        setDefaultStoreId(nextStore.id)
+
+        if (!storedDefaultStoreId || !defaultStore) {
+          writeDefaultStoreId(currentUser.id, nextStore.id)
         }
-
-        const matchingStore = stores.find((store) => {
-          if (currentStore?.id && store.id === currentStore.id) {
-            return true
-          }
-
-          if (currentStore?.url && store.url === currentStore.url) {
-            return true
-          }
-
-          return false
-        })
-
-        setCurrentStore(matchingStore ?? stores.at(-1) ?? null)
       } catch (error) {
         console.error(error)
+      } finally {
+        if (!isCancelled) {
+          setIsStoreReady(true)
+        }
       }
+
     }
 
     hydrateStore()
-  }, [currentStore?.id, currentStore?.url, currentUser?.id, setCurrentStore, setStores])
+
+    return () => {
+      isCancelled = true
+    }
+  }, [currentUser?.id, isAppReady, setCurrentStore, setStores])
 
   useEffect(() => {
     if (!currentStore?.id) {
@@ -218,6 +272,18 @@ export function AppProvider({ children }) {
     setStoreAppsState(nextStoreApps ?? [])
   }
 
+  function setDefaultStore(store) {
+    const nextStore = store ?? null
+    const nextStoreId = nextStore?.id ?? null
+
+    setDefaultStoreId(nextStoreId)
+    writeDefaultStoreId(currentUser?.id, nextStoreId)
+
+    if (nextStore) {
+      setCurrentStore(nextStore)
+    }
+  }
+
   const isAppEnabled = useCallback(
     (appId) => storeApps.some((storeApp) => storeApp.appId === appId && storeApp.enabled),
     [storeApps],
@@ -251,8 +317,18 @@ export function AppProvider({ children }) {
 
     const stores = await getStoresByUserId(nextUser.id)
     setStores(stores)
-    const nextStore = stores.at(-1) ?? null
+    const storedDefaultStoreId = readDefaultStoreId(nextUser.id)
+    const nextStore =
+      stores.find((store) => store.isDefault) ??
+      stores.find((store) => store.id === storedDefaultStoreId) ??
+      stores[0] ??
+      null
     setCurrentStore(nextStore)
+    setDefaultStoreId(nextStore?.id ?? null)
+    if (nextStore && (!storedDefaultStoreId || storedDefaultStoreId !== nextStore.id)) {
+      writeDefaultStoreId(nextUser.id, nextStore.id)
+    }
+    setIsStoreReady(true)
 
     const nextStoreApps = nextStore?.id ? await getStoreApps(nextStore.id) : []
     setStoreAppsState(nextStoreApps)
@@ -270,6 +346,8 @@ export function AppProvider({ children }) {
     setStores([])
     setNotifications([])
     setStoreAppsState([])
+    setDefaultStoreId(null)
+    setIsStoreReady(true)
     writeJson(CURRENT_USER_STORAGE_KEY, null)
     writeJson(STORE_APPS_STORAGE_KEY, [])
   }
@@ -290,9 +368,12 @@ export function AppProvider({ children }) {
         storeApps,
         hasUnreadNotifications,
         isAppReady,
+        isStoreReady,
+        defaultStoreId,
         setCurrentUser,
         setCurrentStore,
         setStores,
+        setDefaultStore,
         setStoreApps,
         refreshStoreApps,
         isAppEnabled,

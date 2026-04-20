@@ -20,6 +20,7 @@ function normalizeStore(store) {
     themeConfig: getThemeConfig(store.themeConfig),
     onboardingStep: Number(store.onboardingStep) || 1,
     isOnboardingCompleted: Boolean(store.isOnboardingCompleted),
+    isDefault: Boolean(store.isDefault),
   }
 }
 

@@ -239,6 +239,12 @@ export function deleteStore(storeId) {
   })
 }
 
+export function setDefaultStore(storeId) {
+  return request(`/stores/${storeId}/default`, {
+    method: 'PUT',
+  })
+}
+
 export function checkStoreSlug(slug, excludeStoreId) {
   const normalizedSlug = (slug || '').toLowerCase().trim()
 
