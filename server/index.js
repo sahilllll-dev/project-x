@@ -96,8 +96,12 @@ function normalizeStoreSlug(value) {
     .replace(/^-+|-+$/g, '')
 }
 
+function normalizeStoreSubdomain(value) {
+  return normalizeStoreSlug(value).replace(/-/g, '')
+}
+
 function normalizeStoreUrl(value) {
-  const slug = normalizeStoreSlug(value)
+  const slug = normalizeStoreSubdomain(value)
   return slug ? `${slug}.projectx.com` : ''
 }
 
@@ -118,7 +122,7 @@ function toStore(row) {
   }
 
   const isDraft = String(row.slug ?? '').startsWith('draft-') && !String(row.name ?? '').trim()
-  const subdomain = normalizeStoreSlug(row.subdomain ?? row.slug)
+  const subdomain = normalizeStoreSubdomain(row.subdomain ?? row.slug)
 
   return {
     id: row.id,
@@ -1001,7 +1005,7 @@ app.post('/stores', async (req, res) => {
     if (!ownerId) return res.status(400).json({ message: 'userId is required' })
 
     const slug = normalizeStoreSlug(req.body.slug ?? req.body.url ?? req.body.name) || getDraftSlug()
-    const subdomain = normalizeStoreSlug(req.body.subdomain ?? slug)
+    const subdomain = normalizeStoreSubdomain(req.body.subdomain ?? slug)
 
     const { data, error } = await supabase
       .from('stores')
@@ -1044,7 +1048,7 @@ app.put('/stores/:id', async (req, res) => {
     const slug = normalizeStoreSlug(req.body.slug ?? req.body.url)
     if (slug) {
       update.slug = slug
-      update.subdomain = normalizeStoreSlug(req.body.subdomain ?? slug)
+      update.subdomain = normalizeStoreSubdomain(req.body.subdomain ?? slug)
     }
   }
   if (req.body.ownerEmail !== undefined) update.owner_email = req.body.ownerEmail
@@ -1189,15 +1193,16 @@ app.get('/store-by-url/:subdomain', async (req, res) => {
   if (!requireSupabase(res)) return
 
   const subdomain = normalizeStoreSlug(req.params.subdomain)
-  console.log('Incoming subdomain:', subdomain)
+  console.log('Incoming:', subdomain)
 
   if (!subdomain) return res.status(400).json({ message: 'Invalid subdomain' })
 
   const fullSubdomain = normalizeStoreUrl(subdomain)
+  const compactSubdomain = normalizeStoreSubdomain(subdomain)
   const { data, error } = await supabase
     .from('stores')
     .select('*')
-    .or(`subdomain.eq.${subdomain},subdomain.eq.${fullSubdomain},slug.eq.${subdomain}`)
+    .or(`subdomain.eq.${subdomain},subdomain.eq.${compactSubdomain},subdomain.eq.${fullSubdomain},slug.eq.${subdomain},slug.eq.${compactSubdomain}`)
     .maybeSingle()
 
   if (error) return res.status(500).json({ error })

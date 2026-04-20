@@ -8,13 +8,14 @@ import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
 
-function normalizeStoreSlug(value) {
+function normalizeSlug(value) {
   return String(value || '')
-    .toLowerCase()
     .trim()
     .replace(/\.projectx\.com$/i, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
 }
 
 function getStoreSlugFromHostname() {
@@ -72,7 +73,7 @@ function StoreFront() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
 
   const storeSubdomain = useMemo(() => {
-    return normalizeStoreSlug(storeName) || getStoreSlugFromHostname()
+    return normalizeSlug(storeName) || getStoreSlugFromHostname()
   }, [storeName])
 
   const derivedStoreUrl = useMemo(() => {
