@@ -87,12 +87,25 @@ create table if not exists public.blogs (
   store_id uuid not null references public.stores (id) on delete cascade,
   title text not null,
   handle text not null,
+  slug text,
+  content text default '',
+  category_id uuid references public.categories (id) on delete set null,
+  tags text[] not null default '{}'::text[],
+  thumbnail_url text default '',
+  meta_title text default '',
+  meta_description text default '',
+  status text not null default 'draft' check (status in ('draft', 'published', 'scheduled')),
+  published_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create unique index if not exists blogs_store_handle_unique
 on public.blogs (store_id, handle);
+
+create unique index if not exists blogs_store_slug_unique
+on public.blogs (store_id, slug)
+where slug is not null;
 
 create table if not exists public.posts (
   id uuid primary key default gen_random_uuid(),

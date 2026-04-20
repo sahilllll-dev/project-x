@@ -407,6 +407,15 @@ function toBlog(row) {
     storeId: row.store_id,
     title: row.title ?? '',
     handle: row.handle ?? '',
+    slug: row.slug ?? row.handle ?? '',
+    content: row.content ?? '',
+    categoryId: row.category_id ?? '',
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    thumbnailUrl: row.thumbnail_url ?? '',
+    metaTitle: row.meta_title ?? '',
+    metaDescription: row.meta_description ?? '',
+    status: row.status ?? 'draft',
+    publishedAt: row.published_at ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1098,6 +1107,40 @@ app.get('/blogs', async (req, res) => {
   }
 })
 
+app.get('/blogs/check-slug', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const slug = normalizeStoreSlug(req.query.slug)
+    const storeId = req.query.storeId ?? req.query.store_id
+
+    if (!slug) return res.status(400).json({ message: 'slug is required' })
+    if (!storeId) return res.status(400).json({ message: 'storeId is required' })
+
+    let query = supabase
+      .from('blogs')
+      .select('id')
+      .eq('store_id', storeId)
+      .or(`slug.eq.${slug},handle.eq.${slug}`)
+
+    if (req.query.excludeBlogId) {
+      query = query.neq('id', req.query.excludeBlogId)
+    }
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Blogs table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.json({ available: !data })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
 app.post('/blogs', async (req, res) => {
   if (!requireSupabase(res)) return
 
@@ -1106,14 +1149,28 @@ app.post('/blogs', async (req, res) => {
     if (!storeId) return
 
     const title = String(req.body.title ?? '').trim()
-    const handle = normalizeStoreSlug(req.body.handle ?? title)
+    const slug = normalizeStoreSlug(req.body.slug ?? req.body.handle ?? title)
+    const handle = normalizeStoreSlug(req.body.handle ?? slug)
 
     if (!title) return res.status(400).json({ message: 'Blog title is required' })
-    if (!handle) return res.status(400).json({ message: 'Blog handle is required' })
+    if (!slug) return res.status(400).json({ message: 'Blog slug is required' })
 
     const { data, error } = await supabase
       .from('blogs')
-      .insert([{ store_id: storeId, title, handle }])
+      .insert([{
+        store_id: storeId,
+        title,
+        handle,
+        slug,
+        content: req.body.content ?? '',
+        category_id: req.body.categoryId ?? req.body.category_id ?? null,
+        tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+        thumbnail_url: req.body.thumbnailUrl ?? req.body.thumbnail_url ?? '',
+        meta_title: req.body.metaTitle ?? req.body.meta_title ?? '',
+        meta_description: req.body.metaDescription ?? req.body.meta_description ?? '',
+        status: req.body.status ?? 'draft',
+        published_at: req.body.publishedAt ?? req.body.published_at ?? null,
+      }])
       .select()
       .single()
 
@@ -1149,6 +1206,29 @@ app.put('/blogs/:id', async (req, res) => {
       const handle = normalizeStoreSlug(req.body.handle)
       if (!handle) return res.status(400).json({ message: 'Blog handle is required' })
       update.handle = handle
+    }
+    if (req.body.slug !== undefined) {
+      const slug = normalizeStoreSlug(req.body.slug)
+      if (!slug) return res.status(400).json({ message: 'Blog slug is required' })
+      update.slug = slug
+    }
+    if (req.body.content !== undefined) update.content = req.body.content
+    if (req.body.categoryId !== undefined || req.body.category_id !== undefined) {
+      update.category_id = req.body.categoryId ?? req.body.category_id ?? null
+    }
+    if (req.body.tags !== undefined) update.tags = Array.isArray(req.body.tags) ? req.body.tags : []
+    if (req.body.thumbnailUrl !== undefined || req.body.thumbnail_url !== undefined) {
+      update.thumbnail_url = req.body.thumbnailUrl ?? req.body.thumbnail_url ?? ''
+    }
+    if (req.body.metaTitle !== undefined || req.body.meta_title !== undefined) {
+      update.meta_title = req.body.metaTitle ?? req.body.meta_title ?? ''
+    }
+    if (req.body.metaDescription !== undefined || req.body.meta_description !== undefined) {
+      update.meta_description = req.body.metaDescription ?? req.body.meta_description ?? ''
+    }
+    if (req.body.status !== undefined) update.status = req.body.status
+    if (req.body.publishedAt !== undefined || req.body.published_at !== undefined) {
+      update.published_at = req.body.publishedAt ?? req.body.published_at ?? null
     }
 
     let query = supabase.from('blogs').update(update).eq('id', req.params.id)
@@ -1222,8 +1302,9 @@ app.get('/posts', async (req, res) => {
 
     const { data, error } = await query
 
-    if (error?.code === '42P01') {
-      return res.status(500).json({ message: 'Posts table is missing' })
+    if (['42P01', '42703', 'PGRST204'].includes(error?.code)) {
+      console.error('Posts list schema is not ready:', error)
+      return res.json([])
     }
 
     if (error) return sendInvalidData(res, error)

@@ -8,6 +8,7 @@ import AddProduct from './pages/AddProduct.jsx'
 import Blogs from './pages/Blogs.jsx'
 import BlogPost from './pages/BlogPost.jsx'
 import BlogPosts from './pages/BlogPosts.jsx'
+import CreateBlogPage from './pages/blogs/CreateBlogPage.jsx'
 import Categories from './pages/Categories.jsx'
 import CustomerDetails from './pages/CustomerDetails.jsx'
 import Customers from './pages/Customers.jsx'
@@ -154,6 +155,7 @@ function App() {
             <Route path="/apps" element={<Apps />} />
             <Route path="/pages" element={<Pages />} />
             <Route path="/blogs" element={<Blogs />} />
+            <Route path="/blogs/create" element={<CreateBlogPage />} />
             <Route path="/blogs/:id" element={<BlogPosts />} />
             <Route path="/blogs/:blogId/create-post" element={<BlogPost />} />
             <Route path="/blogs/:blogId/posts/new" element={<BlogPost />} />

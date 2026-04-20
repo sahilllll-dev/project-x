@@ -67,10 +67,14 @@ async function request(path, options = {}) {
       if (errorText) {
         try {
           const parsedError = JSON.parse(errorText)
-          message = parsedError?.message || message
+          message = parsedError?.message || parsedError?.error || message
         } catch {
           message = errorText.trim().startsWith('<') ? message : errorText
         }
+      }
+
+      if (response.status === 413) {
+        message = 'Request is too large. Remove large uploaded images and try again.'
       }
 
       const error = new Error(message)
@@ -147,6 +151,13 @@ export function deleteCategory(id) {
 export function getBlogs(storeId) {
   const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
   return request(`/blogs${query}`)
+}
+
+export function checkBlogSlug(slug, storeId, excludeBlogId) {
+  const params = new URLSearchParams({ slug })
+  if (storeId) params.set('storeId', String(storeId))
+  if (excludeBlogId) params.set('excludeBlogId', String(excludeBlogId))
+  return request(`/blogs/check-slug?${params.toString()}`)
 }
 
 export function createBlog(data) {

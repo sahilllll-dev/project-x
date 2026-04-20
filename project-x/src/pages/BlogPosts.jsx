@@ -7,6 +7,10 @@ import { useToast } from '../context/ToastContext.jsx'
 import { deleteBlogPost, getBlogPosts, getBlogs } from '../utils/api.js'
 import { formatBlogDate, normalizeBlog, normalizePost } from '../utils/blogs.js'
 
+function canFallbackToEmptyPosts(error) {
+  return error?.status === 400 || error?.status === 404 || error?.status === 500
+}
+
 function BlogPosts() {
   const navigate = useNavigate()
   const { id: blogId } = useParams()
@@ -34,9 +38,12 @@ function BlogPosts() {
       setIsLoading(true)
 
       try {
-        const [blogsResponse, postsResponse] = await Promise.all([
+        const [blogsResponse, postsResult] = await Promise.all([
           getBlogs(currentStore.id),
-          getBlogPosts(blogId, currentStore.id),
+          getBlogPosts(blogId, currentStore.id).then(
+            (response) => ({ response, error: null }),
+            (error) => ({ response: [], error }),
+          ),
         ])
 
         if (isCancelled) {
@@ -45,7 +52,11 @@ function BlogPosts() {
 
         const blogs = (blogsResponse ?? []).map(normalizeBlog)
         setBlog(blogs.find((entry) => String(entry.id) === String(blogId)) ?? null)
-        setPosts((postsResponse ?? []).map(normalizePost))
+        setPosts((postsResult.response ?? []).map(normalizePost))
+
+        if (postsResult.error && !canFallbackToEmptyPosts(postsResult.error)) {
+          throw postsResult.error
+        }
       } catch (error) {
         console.error(error)
         showToast(error.message || 'Failed to load blog posts', 'error')
