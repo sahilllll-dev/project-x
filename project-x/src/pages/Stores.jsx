@@ -36,6 +36,18 @@ function Stores() {
       showToast(`${store.name} is now your default store`, 'success')
     } catch (error) {
       console.error(error)
+      if (error.status === 404) {
+        setDefaultStore(store)
+        setStores((currentStores) =>
+          currentStores.map((currentStore) => ({
+            ...currentStore,
+            isDefault: currentStore.id === store.id,
+          })),
+        )
+        showToast(`${store.name} is now your default store`, 'success')
+        return
+      }
+
       showToast(error.message || 'Something went wrong', 'error')
     }
   }

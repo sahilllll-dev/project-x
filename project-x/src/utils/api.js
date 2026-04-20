@@ -69,11 +69,13 @@ async function request(path, options = {}) {
           const parsedError = JSON.parse(errorText)
           message = parsedError?.message || message
         } catch {
-          message = errorText
+          message = errorText.trim().startsWith('<') ? message : errorText
         }
       }
 
-      throw new Error(message)
+      const error = new Error(message)
+      error.status = response.status
+      throw error
     }
 
     if (response.status === 204) {

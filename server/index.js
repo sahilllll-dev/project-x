@@ -1353,32 +1353,58 @@ app.post('/stores', async (req, res) => {
 app.put('/stores/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const update = {}
-  if (req.body.name !== undefined) {
-    const name = String(req.body.name ?? '').trim()
-    if (!name) return res.status(400).json({ message: 'Store name is required' })
-    update.name = name
-  }
-  if (req.body.url !== undefined || req.body.slug !== undefined) {
-    const slug = normalizeStoreSlug(req.body.slug ?? req.body.url)
-    if (slug) {
-      update.slug = slug
-      update.subdomain = normalizeStoreSubdomain(req.body.subdomain ?? slug)
+  try {
+    const update = {}
+    if (req.body.name !== undefined) {
+      const name = String(req.body.name ?? '').trim()
+      if (!name) return res.status(400).json({ message: 'Store name is required' })
+      update.name = name
     }
-  }
-  if (req.body.ownerEmail !== undefined) update.owner_email = req.body.ownerEmail
-  if (req.body.themeId !== undefined) update.theme_id = req.body.themeId
-  if (req.body.themeConfig !== undefined) update.theme_config = getThemeConfig(req.body.themeConfig)
-  if (req.body.onboardingStep !== undefined) update.onboarding_step = Number(req.body.onboardingStep) || 1
-  if (req.body.isOnboardingCompleted !== undefined) update.is_onboarding_completed = Boolean(req.body.isOnboardingCompleted)
-  if (req.body.logoUrl !== undefined) update.logo_url = req.body.logoUrl
+    if (req.body.url !== undefined || req.body.slug !== undefined) {
+      const slug = normalizeStoreSlug(req.body.slug ?? req.body.url)
+      if (slug) {
+        update.slug = slug
+        update.subdomain = normalizeStoreSubdomain(req.body.subdomain ?? slug)
+      }
+    }
+    if (req.body.ownerEmail !== undefined) update.owner_email = req.body.ownerEmail
+    if (req.body.themeId !== undefined) update.theme_id = req.body.themeId
+    if (req.body.themeConfig !== undefined) update.theme_config = getThemeConfig(req.body.themeConfig)
+    if (req.body.onboardingStep !== undefined) update.onboarding_step = Number(req.body.onboardingStep) || 1
+    if (req.body.isOnboardingCompleted !== undefined) update.is_onboarding_completed = Boolean(req.body.isOnboardingCompleted)
+    if (req.body.logoUrl !== undefined) update.logo_url = req.body.logoUrl
 
-  const { data, error } = await supabase.from('stores').update(update).eq('id', req.params.id).select().single()
-  if (error) {
-    if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
-    return sendInvalidData(res, error)
+    if (req.body.isDefault !== undefined) {
+      const { data: store, error: storeError } = await supabase
+        .from('stores')
+        .select('owner_id')
+        .eq('id', req.params.id)
+        .maybeSingle()
+
+      if (storeError) return sendInvalidData(res, storeError)
+      if (!store) return res.status(404).json({ message: 'Store not found' })
+
+      if (Boolean(req.body.isDefault)) {
+        const { error: clearError } = await supabase
+          .from('stores')
+          .update({ is_default: false })
+          .eq('owner_id', store.owner_id)
+
+        if (clearError) return sendInvalidData(res, clearError)
+      }
+
+      update.is_default = Boolean(req.body.isDefault)
+    }
+
+    const { data, error } = await supabase.from('stores').update(update).eq('id', req.params.id).select().single()
+    if (error) {
+      if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
+      return sendInvalidData(res, error)
+    }
+    res.json(toStore(data))
+  } catch (error) {
+    sendServerError(res, error)
   }
-  res.json(toStore(data))
 })
 
 app.get('/stores/detail/:id', async (req, res) => {
