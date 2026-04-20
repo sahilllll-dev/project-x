@@ -267,6 +267,34 @@ function normalizeCouponCode(code) {
   return String(code ?? '').trim().toUpperCase()
 }
 
+function normalizeCouponExpiresAt(body, { required = false } = {}) {
+  const hasSnakeCase = Object.prototype.hasOwnProperty.call(body, 'expires_at')
+  const hasCamelCase = Object.prototype.hasOwnProperty.call(body, 'expiresAt')
+
+  if (!hasSnakeCase && !hasCamelCase) {
+    if (required) throw new Error('Invalid date format. Use YYYY-MM-DD')
+    return undefined
+  }
+
+  const expiresAt = hasSnakeCase ? body.expires_at : body.expiresAt
+
+  if (expiresAt === null || expiresAt === '') {
+    if (required) throw new Error('Invalid date format. Use YYYY-MM-DD')
+    return null
+  }
+
+  if (typeof expiresAt !== 'string') {
+    throw new Error('Invalid date format. Use YYYY-MM-DD')
+  }
+
+  const parsedDate = new Date(expiresAt)
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error('Invalid date format. Use YYYY-MM-DD')
+  }
+
+  return parsedDate.toISOString()
+}
+
 function calculateCouponDiscount(coupon, orderAmount) {
   const amount = Number(orderAmount) || 0
   let discountAmount = 0
@@ -617,6 +645,7 @@ app.post('/coupons', async (req, res) => {
 
   try {
     const code = normalizeCouponCode(req.body.code)
+    const expiresAt = normalizeCouponExpiresAt(req.body, { required: true })
     if (!code) return res.status(400).json({ message: 'Coupon code is required' })
     if (Number(req.body.value) <= 0) return res.status(400).json({ message: 'Coupon value must be greater than 0' })
     if (req.body.type === 'percentage' && Number(req.body.value) > 100) {
@@ -634,7 +663,7 @@ app.post('/coupons', async (req, res) => {
           min_order_value: Number(req.body.minOrderValue) || 0,
           max_discount: req.body.maxDiscount ? Number(req.body.maxDiscount) : null,
           usage_limit: req.body.usageLimit ? Number(req.body.usageLimit) : null,
-          expires_at: req.body.expiresAt || null,
+          expires_at: expiresAt,
           is_active: req.body.isActive !== false,
         },
       ])
@@ -648,7 +677,8 @@ app.post('/coupons', async (req, res) => {
 
     res.status(201).json(toCoupon(data))
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    const status = error.message === 'Invalid date format. Use YYYY-MM-DD' ? 400 : 500
+    res.status(status).json({ message: error.message })
   }
 })
 
@@ -688,19 +718,25 @@ app.get('/coupons/:code', async (req, res) => {
 app.put('/coupons/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
-  const update = {}
-  if (req.body.code !== undefined) update.code = normalizeCouponCode(req.body.code)
-  if (req.body.type !== undefined) update.type = req.body.type
-  if (req.body.value !== undefined) update.value = Number(req.body.value)
-  if (req.body.minOrderValue !== undefined) update.min_order_value = Number(req.body.minOrderValue) || 0
-  if (req.body.maxDiscount !== undefined) update.max_discount = req.body.maxDiscount ? Number(req.body.maxDiscount) : null
-  if (req.body.usageLimit !== undefined) update.usage_limit = req.body.usageLimit ? Number(req.body.usageLimit) : null
-  if (req.body.expiresAt !== undefined) update.expires_at = req.body.expiresAt || null
-  if (req.body.isActive !== undefined) update.is_active = Boolean(req.body.isActive)
+  try {
+    const update = {}
+    const expiresAt = normalizeCouponExpiresAt(req.body)
+    if (req.body.code !== undefined) update.code = normalizeCouponCode(req.body.code)
+    if (req.body.type !== undefined) update.type = req.body.type
+    if (req.body.value !== undefined) update.value = Number(req.body.value)
+    if (req.body.minOrderValue !== undefined) update.min_order_value = Number(req.body.minOrderValue) || 0
+    if (req.body.maxDiscount !== undefined) update.max_discount = req.body.maxDiscount ? Number(req.body.maxDiscount) : null
+    if (req.body.usageLimit !== undefined) update.usage_limit = req.body.usageLimit ? Number(req.body.usageLimit) : null
+    if (expiresAt !== undefined) update.expires_at = expiresAt
+    if (req.body.isActive !== undefined) update.is_active = Boolean(req.body.isActive)
 
-  const { data, error } = await supabase.from('coupons').update(update).eq('id', req.params.id).select().single()
-  if (error) return res.status(500).json({ error })
-  res.json(toCoupon(data))
+    const { data, error } = await supabase.from('coupons').update(update).eq('id', req.params.id).select().single()
+    if (error) return res.status(500).json({ error })
+    res.json(toCoupon(data))
+  } catch (error) {
+    const status = error.message === 'Invalid date format. Use YYYY-MM-DD' ? 400 : 500
+    res.status(status).json({ message: error.message })
+  }
 })
 
 app.delete('/coupons/:id', async (req, res) => {

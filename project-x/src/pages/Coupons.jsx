@@ -21,27 +21,38 @@ function formatDate(value) {
     return '-'
   }
 
-  return new Date(Number(value)).toLocaleDateString('en-IN', {
+  return new Date(value).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   })
 }
 
-function getTimestampFromDateInput(value) {
-  if (!value) {
-    return 0
+function formatToISO(dateStr) {
+  if (!dateStr) {
+    return null
   }
 
-  return new Date(`${value}T23:59:59`).getTime()
+  const parsedDate = dateStr.includes('/')
+    ? (() => {
+        const [day, month, year] = dateStr.split('/')
+        return new Date(`${year}-${month}-${day}T00:00:00`)
+      })()
+    : new Date(dateStr)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error('Invalid date format. Use YYYY-MM-DD')
+  }
+
+  return parsedDate.toISOString()
 }
 
-function getDateInputFromTimestamp(value) {
+function getDateInputFromISO(value) {
   if (!value) {
     return ''
   }
 
-  return new Date(Number(value)).toISOString().slice(0, 10)
+  return new Date(value).toISOString().slice(0, 10)
 }
 
 function Coupons() {
@@ -89,7 +100,7 @@ function Coupons() {
       minOrderValue: coupon.minOrderValue ? String(coupon.minOrderValue) : '',
       maxDiscount: coupon.maxDiscount ? String(coupon.maxDiscount) : '',
       usageLimit: coupon.usageLimit ? String(coupon.usageLimit) : '',
-      expiresAt: getDateInputFromTimestamp(coupon.expiresAt),
+      expiresAt: getDateInputFromISO(coupon.expiresAt),
       isActive: Boolean(coupon.isActive),
     })
     setIsModalOpen(true)
@@ -114,6 +125,12 @@ function Coupons() {
     setIsSubmitting(true)
 
     try {
+      const expires_at = formatToISO(formData.expiresAt)
+      console.log('Final expiry date:', expires_at)
+      if (typeof expires_at !== 'string') {
+        throw new Error('Invalid date format. Use YYYY-MM-DD')
+      }
+
       const payload = {
         storeId: currentStore.id,
         code: formData.code.trim().toUpperCase(),
@@ -122,7 +139,7 @@ function Coupons() {
         minOrderValue: Number(formData.minOrderValue) || 0,
         maxDiscount: formData.type === 'percentage' ? Number(formData.maxDiscount) || 0 : 0,
         usageLimit: Number(formData.usageLimit) || 0,
-        expiresAt: getTimestampFromDateInput(formData.expiresAt),
+        expires_at,
         isActive: formData.isActive,
       }
 
@@ -143,7 +160,12 @@ function Coupons() {
       setIsModalOpen(false)
     } catch (error) {
       console.error(error)
-      showToast('Something went wrong, please try again', 'error')
+      showToast(
+        error.message === 'Invalid date format. Use YYYY-MM-DD'
+          ? error.message
+          : 'Something went wrong, please try again',
+        'error',
+      )
     } finally {
       setIsSubmitting(false)
     }
