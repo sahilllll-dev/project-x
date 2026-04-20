@@ -96,7 +96,7 @@ function BlogPosts() {
           <h2>{blogTitle}</h2>
           <p>Write, schedule, and manage posts for this blog.</p>
         </div>
-        <Button disabled={!currentStore?.id} onClick={() => navigate(`/blogs/${blogId}/posts/new`)}>
+        <Button disabled={!currentStore?.id} onClick={() => navigate(`/blogs/${blogId}/create-post`)}>
           + Create Post
         </Button>
       </div>
@@ -112,7 +112,7 @@ function BlogPosts() {
           <div className="categories-empty-state">
             <strong>No posts yet</strong>
             <p>Create a draft or publish your first story for this blog.</p>
-            <Button onClick={() => navigate(`/blogs/${blogId}/posts/new`)}>+ Create Post</Button>
+            <Button onClick={() => navigate(`/blogs/${blogId}/create-post`)}>+ Create Post</Button>
           </div>
         ) : (
           <div className="blog-posts-table">

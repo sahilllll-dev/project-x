@@ -2138,19 +2138,40 @@
 
 .blog-post-editor__title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
-.blog-post-editor__title-row h2 {
-  margin: 0;
+.blog-post-title-input {
+  width: min(720px, 100%);
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #111827;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  font-weight: 750;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  outline: none;
+}
+
+.blog-post-title-input::placeholder {
+  color: #9ca3af;
 }
 
 .blog-post-editor__title-row p {
   margin: 5px 0 0;
   color: #6b7280;
+}
+
+.blog-post-editor__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding-top: 8px;
 }
 
 .blog-post-editor__panel {
@@ -3099,6 +3120,15 @@
 }
 
 @media (max-width: 1024px) {
+  .blog-post-editor__title-row {
+    flex-direction: column;
+  }
+
+  .blog-post-editor__header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .blog-post-editor {
     grid-template-columns: 1fr;
   }

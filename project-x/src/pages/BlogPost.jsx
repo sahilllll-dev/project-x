@@ -8,7 +8,13 @@ import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { createBlogPost, getBlogPost, updateBlogPost } from '../utils/api.js'
+import {
+  createBlogPost,
+  getBlogPost,
+  getBlogPosts,
+  getCategories,
+  updateBlogPost,
+} from '../utils/api.js'
 import { normalizePost, slugifyBlogValue } from '../utils/blogs.js'
 
 const initialPostForm = {
@@ -16,6 +22,10 @@ const initialPostForm = {
   slug: '',
   excerpt: '',
   featuredImage: '',
+  categoryId: '',
+  scheduledAt: '',
+  seoTitle: '',
+  seoDescription: '',
   tags: [],
   isPublished: false,
 }
@@ -26,6 +36,51 @@ function getDraftKey(blogId, postId) {
 
 function getTagValue(value) {
   return String(value || '').trim()
+}
+
+function normalizeCategory(category) {
+  return {
+    id: category.id,
+    name: category.name ?? '',
+    parentId: category.parentId ?? category.parent_id ?? '',
+  }
+}
+
+function getScheduledInputValue(value) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 16)
+}
+
+function buildUniqueSlug(baseSlug, posts, currentPostId) {
+  const fallbackSlug = baseSlug || 'post'
+  const usedSlugs = new Set(
+    posts
+      .filter((post) => String(post.id) !== String(currentPostId ?? ''))
+      .map((post) => post.slug)
+      .filter(Boolean),
+  )
+
+  if (!usedSlugs.has(fallbackSlug)) {
+    return fallbackSlug
+  }
+
+  let suffix = 1
+  let nextSlug = `${fallbackSlug}-${suffix}`
+
+  while (usedSlugs.has(nextSlug)) {
+    suffix += 1
+    nextSlug = `${fallbackSlug}-${suffix}`
+  }
+
+  return nextSlug
 }
 
 function RichTextToolbar({ editor }) {
@@ -127,6 +182,8 @@ function BlogPost() {
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastAutosavedAt, setLastAutosavedAt] = useState('')
+  const [categories, setCategories] = useState([])
+  const [existingPosts, setExistingPosts] = useState([])
 
   const draftKey = useMemo(() => getDraftKey(blogId, postId), [blogId, postId])
 
@@ -174,6 +231,10 @@ function BlogPost() {
           slug: post.slug,
           excerpt: post.excerpt,
           featuredImage: post.featuredImage,
+          categoryId: post.categoryId ?? post.category_id ?? '',
+          scheduledAt: getScheduledInputValue(post.scheduledAt ?? post.scheduled_at),
+          seoTitle: post.seoTitle ?? post.seo_title ?? '',
+          seoDescription: post.seoDescription ?? post.seo_description ?? '',
           tags: post.tags,
           isPublished: post.isPublished,
         })
@@ -195,6 +256,40 @@ function BlogPost() {
       isCancelled = true
     }
   }, [blogId, currentStore?.id, editor, isEditMode, postId, showToast])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    async function loadSettingsData() {
+      if (!currentStore?.id || !blogId) {
+        setCategories([])
+        setExistingPosts([])
+        return
+      }
+
+      try {
+        const [categoriesResponse, postsResponse] = await Promise.all([
+          getCategories(currentStore.id),
+          getBlogPosts(blogId, currentStore.id),
+        ])
+
+        if (isCancelled) {
+          return
+        }
+
+        setCategories((categoriesResponse ?? []).map(normalizeCategory))
+        setExistingPosts(postsResponse ?? [])
+      } catch (error) {
+        console.error(error)
+      }
+    }
+
+    loadSettingsData()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [blogId, currentStore?.id])
 
   useEffect(() => {
     if (!editor || isEditMode) {
@@ -327,8 +422,7 @@ function BlogPost() {
     }))
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault()
+  async function savePost(shouldPublish) {
 
     if (!currentStore?.id) {
       showToast('Select a store first', 'error')
@@ -336,7 +430,7 @@ function BlogPost() {
     }
 
     const title = formData.title.trim()
-    const slug = slugifyBlogValue(formData.slug || title)
+    const slug = buildUniqueSlug(slugifyBlogValue(formData.slug || title), existingPosts, postId)
 
     if (!title) {
       showToast('Post title is required', 'error')
@@ -355,10 +449,19 @@ function BlogPost() {
         featuredImage: formData.featuredImage,
         content: editor?.getHTML() ?? '',
         tags: formData.tags,
-        isPublished: formData.isPublished,
-        is_published: formData.isPublished,
-        publishedAt: formData.isPublished ? new Date().toISOString() : null,
-        published_at: formData.isPublished ? new Date().toISOString() : null,
+        categoryId: formData.categoryId || null,
+        category_id: formData.categoryId || null,
+        isPublished: shouldPublish,
+        is_published: shouldPublish,
+        publishedAt: shouldPublish ? new Date().toISOString() : null,
+        published_at: shouldPublish ? new Date().toISOString() : null,
+        scheduledAt: formData.scheduledAt ? new Date(formData.scheduledAt).toISOString() : null,
+        scheduled_at: formData.scheduledAt ? new Date(formData.scheduledAt).toISOString() : null,
+        thumbnail: formData.featuredImage,
+        seoTitle: formData.seoTitle.trim(),
+        seo_title: formData.seoTitle.trim(),
+        seoDescription: formData.seoDescription.trim(),
+        seo_description: formData.seoDescription.trim(),
       }
 
       if (isEditMode) {
@@ -367,7 +470,7 @@ function BlogPost() {
       } else {
         await createBlogPost(payload)
         window.localStorage.removeItem(draftKey)
-        showToast(formData.isPublished ? 'Post published' : 'Draft saved', 'success')
+        showToast(shouldPublish ? 'Post published' : 'Draft saved', 'success')
       }
 
       navigate(`/blogs/${blogId}`)
@@ -379,43 +482,52 @@ function BlogPost() {
     }
   }
 
+  function handleSubmit(event) {
+    event.preventDefault()
+    savePost(formData.isPublished)
+  }
+
   if (isLoading) {
     return <p className="product-empty-state">Loading post...</p>
   }
 
   return (
     <div className="blog-post-editor-page">
-      <button className="product-editor__back" type="button" onClick={() => navigate(`/blogs/${blogId}`)}>
-        <span aria-hidden="true">‹</span>
-        Blog posts
-      </button>
-
       <form className="blog-post-editor" onSubmit={handleSubmit}>
         <div className="blog-post-editor__main">
           <div className="blog-post-editor__title-row">
             <div>
-              <h2>{isEditMode ? 'Edit Post' : 'Create Post'}</h2>
-              <p>{lastAutosavedAt ? `Autosaved at ${lastAutosavedAt}` : 'Drafts autosave locally while you write.'}</p>
-            </div>
-            <Button disabled={isSubmitting} type="submit">
-              {isSubmitting ? 'Saving...' : formData.isPublished ? 'Publish' : 'Save Draft'}
-            </Button>
-          </div>
-
-          <SurfaceCard className="product-panel blog-post-editor__panel">
-            <div className="product-form__field">
-              <label htmlFor="post-title">Title</label>
+              <button className="product-editor__back" type="button" onClick={() => navigate(`/blogs/${blogId}`)}>
+                <span aria-hidden="true">‹</span>
+                Back
+              </button>
               <input
-                id="post-title"
+                className="blog-post-title-input"
                 name="title"
                 type="text"
                 value={formData.title}
                 onChange={handleChange}
-                placeholder="How to style your new collection"
+                placeholder="Blog post title"
                 required
               />
+              <p>{lastAutosavedAt ? `Autosaved at ${lastAutosavedAt}` : 'Drafts autosave locally while you write.'}</p>
             </div>
+            <div className="blog-post-editor__header-actions">
+              <Button
+                disabled={isSubmitting}
+                type="button"
+                variant="outline"
+                onClick={() => savePost(false)}
+              >
+                Save Draft
+              </Button>
+              <Button disabled={isSubmitting} type="button" onClick={() => savePost(true)}>
+                Publish
+              </Button>
+            </div>
+          </div>
 
+          <SurfaceCard className="product-panel blog-post-editor__panel">
             <div className="product-form__field">
               <label htmlFor="post-slug">Slug</label>
               <input
@@ -453,7 +565,7 @@ function BlogPost() {
 
         <aside className="blog-post-editor__sidebar">
           <SurfaceCard className="product-panel">
-            <h3>Publishing</h3>
+            <h3>Status</h3>
             <label className="theme-settings-toggle" htmlFor="post-published">
               <div>
                 <strong>{formData.isPublished ? 'Published' : 'Draft'}</strong>
@@ -470,7 +582,21 @@ function BlogPost() {
           </SurfaceCard>
 
           <SurfaceCard className="product-panel">
-            <h3>Featured Image</h3>
+            <h3>Schedule</h3>
+            <div className="product-form__field">
+              <label htmlFor="post-scheduled-at">Publish date</label>
+              <input
+                id="post-scheduled-at"
+                name="scheduledAt"
+                type="datetime-local"
+                value={formData.scheduledAt}
+                onChange={handleChange}
+              />
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard className="product-panel">
+            <h3>Thumbnail</h3>
             <label className="blog-featured-upload" htmlFor="post-featured-image">
               {formData.featuredImage ? (
                 <img src={formData.featuredImage} alt="Featured preview" />
@@ -496,6 +622,26 @@ function BlogPost() {
           </SurfaceCard>
 
           <SurfaceCard className="product-panel">
+            <h3>Category</h3>
+            <div className="product-form__field">
+              <label htmlFor="post-category">Category</label>
+              <select
+                id="post-category"
+                name="categoryId"
+                value={formData.categoryId}
+                onChange={handleChange}
+              >
+                <option value="">No category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard className="product-panel">
             <h3>Tags</h3>
             <div className="blog-tags-input">
               <input
@@ -517,6 +663,32 @@ function BlogPost() {
                 </button>
               ))}
               {formData.tags.length === 0 ? <p>No tags added.</p> : null}
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard className="product-panel">
+            <h3>SEO</h3>
+            <div className="product-form__field">
+              <label htmlFor="post-seo-title">SEO Title</label>
+              <input
+                id="post-seo-title"
+                name="seoTitle"
+                type="text"
+                value={formData.seoTitle}
+                onChange={handleChange}
+                placeholder="Search title"
+              />
+            </div>
+            <div className="product-form__field">
+              <label htmlFor="post-seo-description">SEO Description</label>
+              <textarea
+                id="post-seo-description"
+                name="seoDescription"
+                value={formData.seoDescription}
+                onChange={handleChange}
+                placeholder="Short search description"
+                rows="4"
+              />
             </div>
           </SurfaceCard>
         </aside>

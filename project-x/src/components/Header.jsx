@@ -26,6 +26,7 @@ const routeTitles = [
   { match: /^\/pages$/, title: 'Pages' },
   { match: /^\/blogs$/, title: 'Blogs' },
   { match: /^\/blogs\/[^/]+$/, title: 'Blog Posts' },
+  { match: /^\/blogs\/[^/]+\/create-post$/, title: 'Create Post' },
   { match: /^\/blogs\/[^/]+\/posts\/new$/, title: 'Create Post' },
   { match: /^\/blogs\/[^/]+\/posts\/[^/]+\/edit$/, title: 'Edit Post' },
   { match: /^\/blog-post$/, title: 'Blogs' },

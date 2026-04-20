@@ -426,9 +426,14 @@ function toBlogPost(row) {
     excerpt: row.excerpt ?? '',
     content: row.content ?? '',
     featuredImage: row.featured_image ?? '',
+    thumbnail: row.thumbnail ?? row.featured_image ?? '',
+    categoryId: row.category_id ?? '',
     tags: Array.isArray(row.tags) ? row.tags : [],
     isPublished: Boolean(row.is_published),
     publishedAt: row.published_at ?? '',
+    scheduledAt: row.scheduled_at ?? '',
+    seoTitle: row.seo_title ?? '',
+    seoDescription: row.seo_description ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1286,10 +1291,15 @@ app.post('/posts', async (req, res) => {
           slug,
           excerpt: req.body.excerpt ?? '',
           content: req.body.content ?? '',
-          featured_image: req.body.featuredImage ?? req.body.featured_image ?? '',
+          featured_image: req.body.featuredImage ?? req.body.featured_image ?? req.body.thumbnail ?? '',
+          thumbnail: req.body.thumbnail ?? req.body.featuredImage ?? req.body.featured_image ?? '',
+          category_id: req.body.categoryId ?? req.body.category_id ?? null,
           tags: Array.isArray(req.body.tags) ? req.body.tags : [],
           is_published: isPublished,
           published_at: isPublished ? req.body.publishedAt ?? req.body.published_at ?? new Date().toISOString() : null,
+          scheduled_at: req.body.scheduledAt ?? req.body.scheduled_at ?? null,
+          seo_title: req.body.seoTitle ?? req.body.seo_title ?? '',
+          seo_description: req.body.seoDescription ?? req.body.seo_description ?? '',
         },
       ])
       .select()
@@ -1332,7 +1342,20 @@ app.put('/posts/:id', async (req, res) => {
     if (req.body.featuredImage !== undefined || req.body.featured_image !== undefined) {
       update.featured_image = req.body.featuredImage ?? req.body.featured_image
     }
+    if (req.body.thumbnail !== undefined) update.thumbnail = req.body.thumbnail
+    if (req.body.categoryId !== undefined || req.body.category_id !== undefined) {
+      update.category_id = req.body.categoryId ?? req.body.category_id ?? null
+    }
     if (req.body.tags !== undefined) update.tags = Array.isArray(req.body.tags) ? req.body.tags : []
+    if (req.body.scheduledAt !== undefined || req.body.scheduled_at !== undefined) {
+      update.scheduled_at = req.body.scheduledAt ?? req.body.scheduled_at ?? null
+    }
+    if (req.body.seoTitle !== undefined || req.body.seo_title !== undefined) {
+      update.seo_title = req.body.seoTitle ?? req.body.seo_title ?? ''
+    }
+    if (req.body.seoDescription !== undefined || req.body.seo_description !== undefined) {
+      update.seo_description = req.body.seoDescription ?? req.body.seo_description ?? ''
+    }
     if (req.body.isPublished !== undefined || req.body.is_published !== undefined) {
       const isPublished = Boolean(req.body.isPublished ?? req.body.is_published)
       update.is_published = isPublished

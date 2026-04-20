@@ -32,6 +32,8 @@ export function normalizePost(post) {
     excerpt: post.excerpt ?? '',
     content: post.content ?? post.body ?? '',
     featuredImage: post.featuredImage ?? post.featured_image ?? '',
+    thumbnail: post.thumbnail ?? post.featuredImage ?? post.featured_image ?? '',
+    categoryId: post.categoryId ?? post.category_id ?? '',
     tags: Array.isArray(post.tags)
       ? post.tags
       : String(post.tags || '')
@@ -40,6 +42,9 @@ export function normalizePost(post) {
           .filter(Boolean),
     isPublished: Boolean(isPublished),
     publishedAt: post.publishedAt ?? post.published_at ?? '',
+    scheduledAt: post.scheduledAt ?? post.scheduled_at ?? '',
+    seoTitle: post.seoTitle ?? post.seo_title ?? '',
+    seoDescription: post.seoDescription ?? post.seo_description ?? '',
     createdAt: post.createdAt ?? post.created_at ?? '',
     updatedAt: post.updatedAt ?? post.updated_at ?? '',
   }

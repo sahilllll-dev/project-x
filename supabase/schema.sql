@@ -103,9 +103,14 @@ create table if not exists public.posts (
   excerpt text default '',
   content text default '',
   featured_image text default '',
+  thumbnail text default '',
+  category_id uuid references public.categories (id) on delete set null,
   tags text[] not null default '{}'::text[],
   is_published boolean not null default false,
   published_at timestamptz,
+  scheduled_at timestamptz,
+  seo_title text default '',
+  seo_description text default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

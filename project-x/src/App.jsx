@@ -155,6 +155,7 @@ function App() {
             <Route path="/pages" element={<Pages />} />
             <Route path="/blogs" element={<Blogs />} />
             <Route path="/blogs/:id" element={<BlogPosts />} />
+            <Route path="/blogs/:blogId/create-post" element={<BlogPost />} />
             <Route path="/blogs/:blogId/posts/new" element={<BlogPost />} />
             <Route path="/blogs/:blogId/posts/:postId/edit" element={<BlogPost />} />
             <Route path="/blog-post" element={<Blogs />} />
