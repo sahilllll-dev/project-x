@@ -89,29 +89,16 @@ function writeDefaultStoreId(userId, storeId) {
 
 export function AppProvider({ children }) {
   const { currentStore, setCurrentStore, storeSwitchVersion, stores, setStores } = useStore()
-  const [currentUser, setCurrentUserState] = useState(null)
+  const [currentUser, setCurrentUserState] = useState(() => readJson(CURRENT_USER_STORAGE_KEY, null))
   const [notifications, setNotifications] = useState([])
-  const [storeApps, setStoreAppsState] = useState([])
-  const [notificationMeta, setNotificationMeta] = useState({})
-  const [isAppReady, setIsAppReady] = useState(false)
+  const [storeApps, setStoreAppsState] = useState(() => readJson(STORE_APPS_STORAGE_KEY, []))
+  const [notificationMeta, setNotificationMeta] = useState(() =>
+    readJson(STORE_NOTIFICATION_STORAGE_KEY, {}),
+  )
+  const isAppReady = true
   const [isStoreReady, setIsStoreReady] = useState(false)
   const [defaultStoreId, setDefaultStoreId] = useState(null)
   const latestOrderTimestampRef = useRef({})
-
-  useEffect(() => {
-    const storedUser = readJson(CURRENT_USER_STORAGE_KEY, null)
-    const storedStoreApps = readJson(STORE_APPS_STORAGE_KEY, [])
-    const storedNotificationMeta = readJson(STORE_NOTIFICATION_STORAGE_KEY, {})
-
-    if (storedUser) {
-      setCurrentUserState(storedUser)
-    }
-
-    setStoreAppsState(storedStoreApps)
-    setNotificationMeta(storedNotificationMeta)
-
-    setIsAppReady(true)
-  }, [])
 
   useEffect(() => {
     writeJson(CURRENT_USER_STORAGE_KEY, currentUser)

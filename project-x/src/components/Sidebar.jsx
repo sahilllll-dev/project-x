@@ -52,7 +52,39 @@ function isEditableElement(element) {
   )
 }
 
-function Sidebar() {
+function SidebarSkeleton() {
+  return (
+    <div className="sidebar-skeleton" aria-label="Loading sidebar">
+      <div className="sidebar-skeleton__store">
+        <span className="sidebar-skeleton__avatar" />
+        <span className="sidebar-skeleton__line sidebar-skeleton__line--title" />
+        <span className="sidebar-skeleton__dots" />
+      </div>
+
+      <div className="sidebar-skeleton__section">
+        <span className="sidebar-skeleton__line sidebar-skeleton__line--label" />
+        {Array.from({ length: 6 }).map((_, index) => (
+          <span className="sidebar-skeleton__nav" key={`main-${index}`}>
+            <span className="sidebar-skeleton__icon" />
+            <span className="sidebar-skeleton__line" />
+          </span>
+        ))}
+      </div>
+
+      <div className="sidebar-skeleton__section">
+        <span className="sidebar-skeleton__line sidebar-skeleton__line--label" />
+        {Array.from({ length: 5 }).map((_, index) => (
+          <span className="sidebar-skeleton__nav" key={`store-${index}`}>
+            <span className="sidebar-skeleton__icon" />
+            <span className="sidebar-skeleton__line" />
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Sidebar({ isLoading = false }) {
   const navigate = useNavigate()
   const location = useLocation()
   const dropdownRef = useRef(null)
@@ -162,6 +194,9 @@ function Sidebar() {
 
   return (
     <aside className="app-sidebar">
+      {isLoading ? <SidebarSkeleton /> : null}
+
+      {!isLoading ? (
       <div className="sidebar-body">
         <div className="sidebar-store" ref={dropdownRef}>
           <button
@@ -359,6 +394,7 @@ function Sidebar() {
           </nav>
         </div>
       </div>
+      ) : null}
 
     </aside>
   )

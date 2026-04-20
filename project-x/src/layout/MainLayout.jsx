@@ -17,7 +17,9 @@ function MainLayout() {
   const resolvedStoreCount = stores.length > 0 ? stores.length : storeCount
   const isNewUser = resolvedStoreCount === 0
   const showHeader = !isNewStoreFlow || resolvedStoreCount > 0
-  const showSidebar = showHeader && Boolean(currentStore)
+  const showSidebar = showHeader
+  const isSidebarLoading = !isStoreReady
+  const isMainContentLoaded = isAppReady && isStoreReady
 
   useEffect(() => {
     if (
@@ -79,12 +81,12 @@ function MainLayout() {
         aria-label="Close sidebar"
         onClick={() => setIsMobileSidebarOpen(false)}
       />
-      {showSidebar ? <Sidebar /> : null}
+      {showSidebar ? <Sidebar isLoading={isSidebarLoading} /> : null}
       <div className="main">
         {showHeader ? (
           <Header onMenuToggle={() => setIsMobileSidebarOpen((isOpen) => !isOpen)} />
         ) : null}
-        <div className="content">
+        <div className={`content main-content${isMainContentLoaded ? ' loaded' : ''}`}>
           <Outlet />
         </div>
       </div>

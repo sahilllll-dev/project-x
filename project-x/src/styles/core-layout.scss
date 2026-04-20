@@ -33,6 +33,15 @@
   min-width: 0;
 }
 
+.main-content {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.main-content.loaded {
+  opacity: 1;
+}
+
 .layout--no-header .content {
   min-height: 100vh;
 }
