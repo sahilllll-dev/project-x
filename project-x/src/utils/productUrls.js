@@ -4,5 +4,11 @@ export function getProductSlug(product, options = {}) {
 }
 
 export function getProductUrl(product, options = {}) {
-  return `/product/${encodeURIComponent(getProductSlug(product, options))}`
+  const url = `/product/${encodeURIComponent(getProductSlug(product, options))}`
+
+  if (!product?.storeId) {
+    return url
+  }
+
+  return `${url}?storeId=${encodeURIComponent(product.storeId)}`
 }

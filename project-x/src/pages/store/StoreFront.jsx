@@ -8,8 +8,27 @@ import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
 
-function slugifyStoreName(value) {
-  return value.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '')
+function normalizeStoreSlug(value) {
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\.projectx\.com$/i, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function getStoreSlugFromHostname() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  const hostname = window.location.hostname.toLowerCase()
+  if (!hostname.endsWith('.projectx.com')) {
+    return ''
+  }
+
+  const slug = hostname.split('.')[0]
+  return ['www', 'app'].includes(slug) ? '' : slug
 }
 
 function formatStoreNameFromSlug(value) {
@@ -53,11 +72,13 @@ function StoreFront() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
 
   const derivedStoreUrl = useMemo(() => {
-    if (!storeName) {
+    const slug = normalizeStoreSlug(storeName) || getStoreSlugFromHostname()
+
+    if (!slug) {
       return ''
     }
 
-    return `${slugifyStoreName(storeName)}.projectx.com`
+    return `${slug}.projectx.com`
   }, [storeName])
 
   useEffect(() => {
@@ -65,13 +86,19 @@ function StoreFront() {
       setIsLoading(true)
 
       try {
+        if (!derivedStoreUrl) {
+          throw new Error('Store URL is required')
+        }
+
         const matchedStore = await getStoreByUrl(derivedStoreUrl)
         setStore(matchedStore)
+        console.log('Store ID:', matchedStore.id)
 
         const [response, installedApps] = await Promise.all([
           getProducts(matchedStore.id),
           getStoreApps(matchedStore.id),
         ])
+        console.log('Products:', response)
         setUseSeoProductUrls(
           installedApps.some((storeApp) => storeApp.appId === 'seo-helper' && storeApp.enabled),
         )

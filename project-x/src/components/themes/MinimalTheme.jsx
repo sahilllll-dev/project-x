@@ -26,7 +26,7 @@ function MinimalTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
       </header>
 
       {products.length === 0 ? (
-        <p className="public-store__empty">No products available</p>
+        <p className="public-store__empty">No products found</p>
       ) : (
         <section className="store-theme__grid store-theme__grid--minimal">
           {products.map((product) => {

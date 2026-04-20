@@ -80,8 +80,9 @@ export function getProducts(storeId) {
   return request(`/products${query}`)
 }
 
-export function getProductBySlug(slug) {
-  return request(`/product/${encodeURIComponent(slug)}`)
+export function getProductBySlug(slug, storeId) {
+  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  return request(`/product/${encodeURIComponent(slug)}${query}`)
 }
 
 export function createProduct(data) {

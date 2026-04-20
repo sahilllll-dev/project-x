@@ -28,6 +28,24 @@ import { useToast } from './context/ToastContext.jsx'
 
 const NEW_ORDER_EVENT = 'projectx:new-order'
 
+function isProjectXSubdomain() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const hostname = window.location.hostname.toLowerCase()
+  if (!hostname.endsWith('.projectx.com')) {
+    return false
+  }
+
+  const slug = hostname.split('.')[0]
+  return Boolean(slug && !['www', 'app'].includes(slug))
+}
+
+function HomeRoute() {
+  return isProjectXSubdomain() ? <StoreFront /> : <Navigate to="/login" />
+}
+
 function playOrderNotificationSound() {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext
@@ -100,7 +118,7 @@ function App() {
       <ApiProgressBar />
 
       <Routes>
-      <Route path="/" element={<Navigate to="/login" />} />
+      <Route path="/" element={<HomeRoute />} />
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

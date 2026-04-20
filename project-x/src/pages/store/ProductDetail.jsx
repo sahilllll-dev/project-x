@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { createOrder, getProductBySlug, validateCoupon } from '../../utils/api.js'
 import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
@@ -19,6 +19,8 @@ function getProductImage(product) {
 
 function ProductDetail() {
   const { slug = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const storeId = searchParams.get('storeId')
   const { currentUser, isAppReady } = useAppContext()
   const { showToast } = useToast()
   const [product, setProduct] = useState(null)
@@ -40,7 +42,7 @@ function ProductDetail() {
       setIsLoading(true)
 
       try {
-        setProduct(await getProductBySlug(slug))
+        setProduct(await getProductBySlug(slug, storeId))
       } catch (error) {
         console.error(error)
         setProduct(null)
@@ -50,7 +52,7 @@ function ProductDetail() {
     }
 
     loadProduct()
-  }, [slug])
+  }, [slug, storeId])
 
   function handleCheckoutFieldChange(event) {
     const { name, value } = event.target

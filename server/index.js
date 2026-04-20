@@ -536,7 +536,14 @@ app.get('/product/:slug', async (req, res) => {
 
   try {
     const slug = req.params.slug
-    const { data, error } = await supabase.from('products').select('*')
+    const storeId = req.query.storeId ?? req.query.store_id
+    let query = supabase.from('products').select('*')
+
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query
 
     if (error) return res.status(500).json({ error })
 

@@ -26,8 +26,8 @@ const routeTitles = [
   { match: /^\/blog-post$/, title: 'Blog Post' },
 ]
 
-function slugifyStoreName(value) {
-  return value.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '')
+function getStoreUrlSlug(value) {
+  return String(value || '').replace(/\.projectx\.com$/i, '')
 }
 
 function formatNotificationDate(value) {
@@ -101,7 +101,7 @@ function Header({ onMenuToggle }) {
   }, [isNotificationMenuOpen])
 
   const currentStoreLink = currentStore
-    ? `/store/${encodeURIComponent(slugifyStoreName(currentStore.name ?? 'store'))}`
+    ? `/store/${encodeURIComponent(getStoreUrlSlug(currentStore.url ?? currentStore.slug ?? currentStore.name))}`
     : ''
 
   async function handleLogout() {

@@ -28,7 +28,7 @@ function ModernTheme({ products, store, onBuyNow, useSeoProductUrls = true }) {
       </header>
 
       {products.length === 0 ? (
-        <p className="public-store__empty">No products available</p>
+        <p className="public-store__empty">No products found</p>
       ) : (
         <section className="store-theme__grid store-theme__grid--modern">
           {products.map((product) => {

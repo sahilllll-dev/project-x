@@ -134,7 +134,7 @@ function ProductGrid({ products, onBuyNow, primaryColor, useSeoProductUrls }) {
       </div>
 
       {products.length === 0 ? (
-        <p className="public-store__empty">No products available</p>
+        <p className="public-store__empty">No products found</p>
       ) : (
         <div className="kalles-products__grid">
           {products.map((product) => {
