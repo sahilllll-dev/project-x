@@ -4,7 +4,7 @@ import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { checkStoreSlug, createStore } from '../utils/api.js'
+import { checkStoreSlug, createStore, getStoresByUserId } from '../utils/api.js'
 
 const initialFormData = {
   name: '',
@@ -29,6 +29,54 @@ function parseApiError(error) {
   }
 }
 
+function OnboardingLayout({ children, showBackButton, title }) {
+  const navigate = useNavigate()
+  const steps = ['Store Settings', 'Add Products', 'Sell Online']
+
+  return (
+    <div className="dashboard">
+      <div className="dashboard-intro">
+        {showBackButton ? (
+          <button className="product-editor__back" type="button" onClick={() => navigate('/stores')}>
+            Back to stores
+          </button>
+        ) : null}
+        <h2>{title}</h2>
+        <p>Add the basic details for your new storefront.</p>
+      </div>
+
+      <section className="setup-guide">
+        <div className="setup-guide__heading">
+          <h3>Setup guide</h3>
+          <span className="setup-guide__status">0/4 Completed</span>
+        </div>
+
+        <div className="setup-guide__card">
+          <div className="setup-guide__steps">
+            <ul className="setup-list">
+              {steps.map((step, index) => (
+                <li
+                  className={`setup-list__item${index === 0 ? ' is-active' : ''}`}
+                  key={step}
+                >
+                  <span className="setup-list__icon" aria-hidden="true">
+                    {index === 0 ? '✓' : ''}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <section className="right-panel">
+            {children}
+          </section>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function NewStoreOnboarding() {
   const navigate = useNavigate()
   const { currentUser, setCurrentStore } = useAppContext()
@@ -38,11 +86,31 @@ function NewStoreOnboarding() {
   const [isSlugAvailable, setIsSlugAvailable] = useState(null)
   const [slugError, setSlugError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [storeCount, setStoreCount] = useState(null)
+  const isNewUser = storeCount === 0
   const isValid = Boolean(formData.name.trim() && formData.slug.trim() && isSlugAvailable === true)
 
   useEffect(() => {
     setCurrentStore(null)
   }, [setCurrentStore])
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      return
+    }
+
+    async function loadStoreCount() {
+      try {
+        const stores = await getStoresByUserId(currentUser.id)
+        setStoreCount(stores.length)
+      } catch (error) {
+        console.error(error)
+        setStoreCount(null)
+      }
+    }
+
+    loadStoreCount()
+  }, [currentUser?.id])
 
   useEffect(() => {
     const slug = normalizeSlug(formData.slug)
@@ -160,15 +228,10 @@ function NewStoreOnboarding() {
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-intro">
-        <button className="product-editor__back" type="button" onClick={() => navigate('/stores')}>
-          Back to stores
-        </button>
-        <h2>Create new store</h2>
-        <p>Add the basic details for your new storefront.</p>
-      </div>
-
+    <OnboardingLayout
+      showBackButton={!isNewUser && storeCount !== null}
+      title={isNewUser ? 'Create Your First Store' : 'Add New Store'}
+    >
       <SurfaceCard as="form" className="form-card" onSubmit={handleCreateStore}>
         <div className="form-field">
           <label htmlFor="new-store-name">Store Name*</label>
@@ -243,7 +306,7 @@ function NewStoreOnboarding() {
           {isSubmitting ? 'Creating...' : 'Create Store'}
         </Button>
       </SurfaceCard>
-    </div>
+    </OnboardingLayout>
   )
 }
 

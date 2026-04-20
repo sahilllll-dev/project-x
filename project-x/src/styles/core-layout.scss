@@ -33,6 +33,15 @@
   min-width: 0;
 }
 
+.layout--no-header .content {
+  min-height: 100vh;
+}
+
+.layout--first-onboarding .content {
+  display: grid;
+  place-items: center;
+}
+
 .ui-surface {
   border: 1px solid #e7e9ee;
   border-radius: 16px;
