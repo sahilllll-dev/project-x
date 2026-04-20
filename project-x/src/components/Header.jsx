@@ -26,10 +26,6 @@ const routeTitles = [
   { match: /^\/pages$/, title: 'Pages' },
   { match: /^\/blogs$/, title: 'Blogs' },
   { match: /^\/blogs\/create$/, title: 'Create Blog' },
-  { match: /^\/blogs\/[^/]+$/, title: 'Blog Posts' },
-  { match: /^\/blogs\/[^/]+\/create-post$/, title: 'Create Post' },
-  { match: /^\/blogs\/[^/]+\/posts\/new$/, title: 'Create Post' },
-  { match: /^\/blogs\/[^/]+\/posts\/[^/]+\/edit$/, title: 'Edit Post' },
   { match: /^\/blog-post$/, title: 'Blogs' },
 ]
 
@@ -227,23 +223,25 @@ function Header({ onMenuToggle }) {
           Logout
         </Button>
 
-        <IconButton className="header-icon-button" aria-label="Settings">
+        <IconButton className="header-icon-button" aria-label="Settings" title="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z"
+            <circle
+              cx="12"
+              cy="12"
+              r="3"
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="1.7"
+              strokeWidth="1.8"
             />
             <path
-              d="M19.43 13.15a7.84 7.84 0 0 0 .05-2.3l2.02-1.58-2-3.46-2.53 1.02a8.25 8.25 0 0 0-1.99-1.15L14.6 3h-5.2l-.38 2.68a8.25 8.25 0 0 0-1.99 1.15L4.5 5.81l-2 3.46 2.02 1.58a7.84 7.84 0 0 0 .05 2.3L2.5 14.73l2 3.46 2.55-1.03c.6.47 1.27.85 1.97 1.14L9.4 21h5.2l.38-2.7c.7-.29 1.37-.67 1.97-1.14l2.55 1.03 2-3.46-2.07-1.58Z"
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1.07V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.07-.33H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1.07V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.38.39.71.72.95.29.22.65.33 1.01.32H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51.73Z"
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="1.7"
+              strokeWidth="1.8"
             />
           </svg>
         </IconButton>
@@ -252,24 +250,25 @@ function Header({ onMenuToggle }) {
           <IconButton
             className={`header-icon-button header-icon-button--notification${hasUnreadNotifications ? ' is-active' : ''}`}
             aria-label="Notifications"
+            title="Notifications"
             onClick={handleNotificationToggle}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
-                d="M18 9.75a6 6 0 1 0-12 0c0 7.25-2.25 7.25-2.25 7.25h16.5S18 17 18 9.75Z"
+                d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9Z"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="1.7"
+                strokeWidth="1.8"
               />
               <path
-                d="M9.75 19.25a2.5 2.5 0 0 0 4.5 0"
+                d="M13.73 21a2 2 0 0 1-3.46 0"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="1.7"
+                strokeWidth="1.8"
               />
             </svg>
             {hasUnreadNotifications ? <span className="notification-dot" aria-hidden="true" /> : null}

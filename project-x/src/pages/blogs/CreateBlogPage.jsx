@@ -11,41 +11,32 @@ import { useToast } from '../../context/ToastContext.jsx'
 import {
   createBlog,
   getBlogs,
-  getCategories,
   updateBlog,
 } from '../../utils/api.js'
-import { normalizeBlog } from '../../utils/blogs.js'
+import { normalizePost } from '../../utils/blogs.js'
 
 const initialFormData = {
   title: '',
   slug: '',
   content: '',
-  categoryId: '',
   tags: [],
   thumbnailUrl: '',
   metaTitle: '',
   metaDescription: '',
-  status: 'draft',
+  isPublished: false,
   publishedAt: '',
 }
 
 function getDraftKey(storeId, editId) {
-  return `projectx:create-blog:${storeId || 'store'}:${editId || 'new'}`
+  return `projectx:create-blog-post:${storeId || 'store'}:${editId || 'new'}`
 }
 
 function sanitizeSlug(value) {
   return String(value || '')
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, '')
-    .trim()
     .replace(/\s+/g, '-')
-}
-
-function normalizeCategory(category) {
-  return {
-    id: category.id,
-    name: category.name ?? '',
-  }
+    .replace(/^-+|-+$/g, '')
 }
 
 function getDatetimeInput(value) {
@@ -146,7 +137,6 @@ function CreateBlogPage() {
   const { currentStore } = useAppContext()
   const { showToast } = useToast()
   const [formData, setFormData] = useState(initialFormData)
-  const [categories, setCategories] = useState([])
   const [tagInput, setTagInput] = useState('')
   const [isSlugEdited, setIsSlugEdited] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
@@ -178,40 +168,33 @@ function CreateBlogPage() {
 
     async function loadPageData() {
       if (!currentStore?.id) {
-        setCategories([])
         return
       }
 
       try {
-        const [categoriesResponse, blogsResponse] = await Promise.all([
-          getCategories(currentStore.id).catch(() => []),
-          isEditMode ? getBlogs(currentStore.id) : Promise.resolve([]),
-        ])
+        const blogsResponse = isEditMode ? await getBlogs(currentStore.id) : []
 
         if (isCancelled) {
           return
         }
 
-        setCategories((categoriesResponse ?? []).map(normalizeCategory))
-
         if (isEditMode) {
-          const blog = (blogsResponse ?? []).map(normalizeBlog).find((entry) => entry.id === editId)
-          if (blog) {
+          const post = (blogsResponse ?? []).map(normalizePost).find((entry) => entry.id === editId)
+          if (post) {
             setFormData({
               ...initialFormData,
-              title: blog.title,
-              slug: blog.slug || blog.handle,
-              content: blog.content || '',
-              categoryId: blog.categoryId || '',
-              tags: Array.isArray(blog.tags) ? blog.tags : [],
-              thumbnailUrl: blog.thumbnailUrl || blog.thumbnail_url || '',
-              metaTitle: blog.metaTitle || blog.meta_title || '',
-              metaDescription: blog.metaDescription || blog.meta_description || '',
-              status: blog.status || 'draft',
-              publishedAt: getDatetimeInput(blog.publishedAt || blog.published_at),
+              title: post.title,
+              slug: post.slug,
+              content: post.content || '',
+              tags: Array.isArray(post.tags) ? post.tags : [],
+              thumbnailUrl: post.thumbnail || post.thumbnailUrl || '',
+              metaTitle: post.seoTitle || post.metaTitle || post.meta_title || '',
+              metaDescription: post.seoDescription || post.metaDescription || post.meta_description || '',
+              isPublished: post.isPublished,
+              publishedAt: getDatetimeInput(post.publishedAt || post.scheduledAt),
             })
             setIsSlugEdited(true)
-            editor?.commands.setContent(blog.content || '<p></p>')
+            editor?.commands.setContent(post.content || '<p></p>')
           }
         }
       } catch (error) {
@@ -285,9 +268,9 @@ function CreateBlogPage() {
       const blogsResponse = await getBlogs(currentStore?.id)
       const existingSlugs = new Set(
         (blogsResponse ?? [])
-          .map(normalizeBlog)
-          .filter((blog) => blog.id !== editId)
-          .flatMap((blog) => [blog.slug, blog.handle])
+          .map(normalizePost)
+          .filter((post) => post.id !== editId)
+          .map((post) => post.slug)
           .filter(Boolean),
       )
 
@@ -340,6 +323,12 @@ function CreateBlogPage() {
       return
     }
 
+    if (name === 'isPublished') {
+      setFormData((currentData) => ({ ...currentData, isPublished: value === 'true' }))
+      setIsDirty(true)
+      return
+    }
+
     setFormData((currentData) => ({ ...currentData, [name]: value }))
     setIsDirty(true)
   }
@@ -382,7 +371,7 @@ function CreateBlogPage() {
     setIsDirty(true)
   }
 
-  async function saveBlog(nextStatus) {
+  async function saveBlog() {
     if (!currentStore?.id) {
       showToast('Select a store first', 'error')
       return
@@ -390,7 +379,13 @@ function CreateBlogPage() {
 
     const title = formData.title.trim()
     if (!title) {
-      showToast('Blog title is required', 'error')
+      showToast('Blog post title is required', 'error')
+      return
+    }
+
+    const plainText = editor?.getText().trim() || ''
+    if (!plainText) {
+      showToast('Content cannot be empty', 'error')
       return
     }
 
@@ -398,42 +393,33 @@ function CreateBlogPage() {
 
     try {
       const slug = await resolveUniqueSlug(sanitizeSlug(formData.slug || title))
-      const status = nextStatus || formData.status
-      const publishedAt =
-        status === 'published'
-          ? new Date().toISOString()
-          : status === 'scheduled' && formData.publishedAt
-            ? new Date(formData.publishedAt).toISOString()
-            : null
-      const thumbnailUrl = getPersistableImageUrl(formData.thumbnailUrl)
+      const content = editor?.getHTML() || formData.content
+      const featuredImage = getPersistableImageUrl(formData.thumbnailUrl)
+      const publishedAt = formData.isPublished ? new Date().toISOString() : null
 
       const payload = {
-        storeId: currentStore.id,
+        store_id: currentStore.id,
         title,
         slug,
-        handle: slug,
-        content: editor?.getHTML() || formData.content,
-        category_id: formData.categoryId || null,
-        categoryId: formData.categoryId || null,
-        tags: formData.tags,
-        thumbnail_url: thumbnailUrl,
-        thumbnailUrl,
-        meta_title: formData.metaTitle.trim(),
-        metaTitle: formData.metaTitle.trim(),
-        meta_description: formData.metaDescription.trim(),
-        metaDescription: formData.metaDescription.trim(),
-        status,
+        content,
+        excerpt: plainText.slice(0, 180),
+        featured_image: featuredImage || null,
+        is_published: formData.isPublished,
         published_at: publishedAt,
-        publishedAt,
+        meta_title: formData.metaTitle.trim() || null,
+        meta_description: formData.metaDescription.trim() || null,
+        tags: Array.isArray(formData.tags) ? formData.tags : [],
       }
+
+      console.log('FINAL BLOG PAYLOAD:', payload)
 
       if (isEditMode) {
         await updateBlog(editId, payload)
-        showToast('Blog updated', 'success')
+        showToast('Blog post updated', 'success')
       } else {
         await createBlog(payload)
         window.localStorage.removeItem(draftKey)
-        showToast(status === 'draft' ? 'Draft saved' : 'Blog published', 'success')
+        showToast('Blog post published', 'success')
       }
 
       setIsDirty(false)
@@ -454,10 +440,10 @@ function CreateBlogPage() {
           Back
         </button>
         <div className="blog-create-header__actions">
-          <Button disabled={isSubmitting} type="button" variant="outline" onClick={() => saveBlog('draft')}>
+          <Button disabled={isSubmitting} type="button" variant="outline" onClick={saveBlog}>
             Save Draft
           </Button>
-          <Button disabled={isSubmitting} type="button" onClick={() => saveBlog(formData.publishedAt ? 'scheduled' : 'published')}>
+          <Button disabled={isSubmitting} type="button" onClick={saveBlog}>
             Publish
           </Button>
         </div>
@@ -471,7 +457,7 @@ function CreateBlogPage() {
             type="text"
             value={formData.title}
             onChange={handleChange}
-            placeholder="Blog title"
+            placeholder="Blog post title"
           />
 
           <SurfaceCard className="product-panel blog-post-editor__panel">
@@ -502,11 +488,15 @@ function CreateBlogPage() {
           <SurfaceCard className="product-panel">
             <h3>Publish Settings</h3>
             <div className="product-form__field">
-              <label htmlFor="blog-status">Status</label>
-              <select id="blog-status" name="status" value={formData.status} onChange={handleChange}>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="scheduled">Scheduled</option>
+              <label htmlFor="blog-publish-state">Publish state</label>
+              <select
+                id="blog-publish-state"
+                name="isPublished"
+                value={String(formData.isPublished)}
+                onChange={handleChange}
+              >
+                <option value="false">Draft</option>
+                <option value="true">Published</option>
               </select>
             </div>
             <div className="product-form__field">
@@ -524,27 +514,12 @@ function CreateBlogPage() {
           <SurfaceCard className="product-panel">
             <h3>Thumbnail</h3>
             <label className="blog-featured-upload" htmlFor="blog-thumbnail">
-          {formData.thumbnailUrl ? <img src={formData.thumbnailUrl} alt="Blog thumbnail" /> : <span>Upload image</span>}
+              {formData.thumbnailUrl ? <img src={formData.thumbnailUrl} alt="Blog thumbnail" /> : <span>Upload image</span>}
               <input id="blog-thumbnail" type="file" accept="image/*" onChange={handleThumbnailChange} />
             </label>
             {isLocalImagePreview(formData.thumbnailUrl) ? (
               <p className="blog-upload-note">Preview only. Connect media storage to save uploaded thumbnails.</p>
             ) : null}
-          </SurfaceCard>
-
-          <SurfaceCard className="product-panel">
-            <h3>Category</h3>
-            <div className="product-form__field">
-              <label htmlFor="blog-category">Category</label>
-              <select id="blog-category" name="categoryId" value={formData.categoryId} onChange={handleChange}>
-                <option value="">No category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
           </SurfaceCard>
 
           <SurfaceCard className="product-panel">

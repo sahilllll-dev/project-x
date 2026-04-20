@@ -6,8 +6,6 @@ import MainLayout from './layout/MainLayout.jsx'
 import Apps from './pages/Apps.jsx'
 import AddProduct from './pages/AddProduct.jsx'
 import Blogs from './pages/Blogs.jsx'
-import BlogPost from './pages/BlogPost.jsx'
-import BlogPosts from './pages/BlogPosts.jsx'
 import CreateBlogPage from './pages/blogs/CreateBlogPage.jsx'
 import Categories from './pages/Categories.jsx'
 import CustomerDetails from './pages/CustomerDetails.jsx'
@@ -22,6 +20,7 @@ import Orders from './pages/dashboard/Orders.jsx'
 import Pages from './pages/Pages.jsx'
 import Payments from './pages/Payments.jsx'
 import Products from './pages/Products.jsx'
+import BlogArticle from './pages/store/BlogArticle.jsx'
 import ProductDetail from './pages/store/ProductDetail.jsx'
 import Signup from './pages/Signup.jsx'
 import StoreFront from './pages/store/StoreFront.jsx'
@@ -103,7 +102,11 @@ function App() {
 
   useEffect(() => {
     function handleNewOrder() {
-      if (location.pathname.startsWith('/store/') || location.pathname.startsWith('/product/')) {
+      if (
+        location.pathname.startsWith('/store/') ||
+        location.pathname.startsWith('/product/') ||
+        location.pathname.startsWith('/blog/')
+      ) {
         return
       }
 
@@ -131,6 +134,7 @@ function App() {
 
         <Route path="/store/:storeName" element={<StoreFront />} />
         <Route path="/product/:slug" element={<ProductDetail />} />
+        <Route path="/blog/:slug" element={<BlogArticle />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
@@ -156,10 +160,6 @@ function App() {
             <Route path="/pages" element={<Pages />} />
             <Route path="/blogs" element={<Blogs />} />
             <Route path="/blogs/create" element={<CreateBlogPage />} />
-            <Route path="/blogs/:id" element={<BlogPosts />} />
-            <Route path="/blogs/:blogId/create-post" element={<BlogPost />} />
-            <Route path="/blogs/:blogId/posts/new" element={<BlogPost />} />
-            <Route path="/blogs/:blogId/posts/:postId/edit" element={<BlogPost />} />
             <Route path="/blog-post" element={<Blogs />} />
           </Route>
         </Route>

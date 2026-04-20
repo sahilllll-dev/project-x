@@ -28,7 +28,7 @@ where slug is not null;
 create table if not exists public.posts (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references public.stores (id) on delete cascade,
-  blog_id uuid not null references public.blogs (id) on delete cascade,
+  blog_id uuid references public.blogs (id) on delete set null,
   title text not null,
   slug text not null,
   excerpt text default '',
@@ -48,6 +48,9 @@ create table if not exists public.posts (
 
 create unique index if not exists posts_blog_slug_unique
 on public.posts (blog_id, slug);
+
+create unique index if not exists posts_store_slug_unique
+on public.posts (store_id, slug);
 
 drop trigger if exists blogs_handle_updated_at on public.blogs;
 create trigger blogs_handle_updated_at
