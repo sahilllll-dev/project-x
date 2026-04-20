@@ -1375,9 +1375,10 @@ app.put('/stores/:id', async (req, res) => {
     if (req.body.logoUrl !== undefined) update.logo_url = req.body.logoUrl
 
     if (req.body.isDefault !== undefined) {
+      let isDefaultColumnMissing = false
       const { data: store, error: storeError } = await supabase
         .from('stores')
-        .select('owner_id')
+        .select('*')
         .eq('id', req.params.id)
         .maybeSingle()
 
@@ -1390,7 +1391,16 @@ app.put('/stores/:id', async (req, res) => {
           .update({ is_default: false })
           .eq('owner_id', store.owner_id)
 
-        if (clearError) return sendInvalidData(res, clearError)
+        if (clearError?.code === '42703') {
+          console.error('Default store column is missing. Apply 20260420_default_store.sql to persist defaults.')
+          isDefaultColumnMissing = true
+        } else if (clearError) {
+          return sendInvalidData(res, clearError)
+        }
+      }
+
+      if (isDefaultColumnMissing) {
+        return res.json(toStore({ ...store, is_default: true }))
       }
 
       update.is_default = Boolean(req.body.isDefault)
@@ -1399,6 +1409,18 @@ app.put('/stores/:id', async (req, res) => {
     const { data, error } = await supabase.from('stores').update(update).eq('id', req.params.id).select().single()
     if (error) {
       if (error.code === '23505') return res.status(400).json({ message: 'Store Temporary URL already used' })
+      if (error.code === '42703' && req.body.isDefault !== undefined) {
+        console.error('Default store column is missing. Apply 20260420_default_store.sql to persist defaults.')
+        const { data: store, error: storeError } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('id', req.params.id)
+          .maybeSingle()
+
+        if (storeError) return sendInvalidData(res, storeError)
+        if (!store) return res.status(404).json({ message: 'Store not found' })
+        return res.json(toStore({ ...store, is_default: Boolean(req.body.isDefault) }))
+      }
       return sendInvalidData(res, error)
     }
     res.json(toStore(data))
@@ -1441,6 +1463,11 @@ app.put('/stores/:id/default', async (req, res) => {
       .update({ is_default: false })
       .eq('owner_id', store.owner_id)
 
+    if (clearError?.code === '42703') {
+      console.error('Default store column is missing. Apply 20260420_default_store.sql to persist defaults.')
+      return res.json(toStore({ ...store, is_default: true }))
+    }
+
     if (clearError) return sendInvalidData(res, clearError)
 
     const { data, error } = await supabase
@@ -1449,6 +1476,11 @@ app.put('/stores/:id/default', async (req, res) => {
       .eq('id', req.params.id)
       .select()
       .single()
+
+    if (error?.code === '42703') {
+      console.error('Default store column is missing. Apply 20260420_default_store.sql to persist defaults.')
+      return res.json(toStore({ ...store, is_default: true }))
+    }
 
     if (error) return sendInvalidData(res, error)
     res.json(toStore(data))

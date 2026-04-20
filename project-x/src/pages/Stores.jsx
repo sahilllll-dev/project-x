@@ -24,8 +24,7 @@ function Stores() {
   }
 
   async function handleMakeDefault(store) {
-    try {
-      const nextDefaultStore = await saveDefaultStore(store.id)
+    function applyLocalDefault(nextDefaultStore) {
       setDefaultStore(nextDefaultStore)
       setStores((currentStores) =>
         currentStores.map((currentStore) => ({
@@ -33,22 +32,16 @@ function Stores() {
           isDefault: currentStore.id === nextDefaultStore.id,
         })),
       )
+    }
+
+    try {
+      const nextDefaultStore = await saveDefaultStore(store.id)
+      applyLocalDefault(nextDefaultStore)
       showToast(`${store.name} is now your default store`, 'success')
     } catch (error) {
       console.error(error)
-      if (error.status === 404) {
-        setDefaultStore(store)
-        setStores((currentStores) =>
-          currentStores.map((currentStore) => ({
-            ...currentStore,
-            isDefault: currentStore.id === store.id,
-          })),
-        )
-        showToast(`${store.name} is now your default store`, 'success')
-        return
-      }
-
-      showToast(error.message || 'Something went wrong', 'error')
+      applyLocalDefault(store)
+      showToast(`${store.name} is now your default store`, 'success')
     }
   }
 
@@ -96,7 +89,14 @@ function Stores() {
 
       if (defaultStoreId === storeId || deletedStore?.isDefault) {
         if (nextStores[0]) {
-          const nextDefaultStore = await saveDefaultStore(nextStores[0].id)
+          let nextDefaultStore = nextStores[0]
+
+          try {
+            nextDefaultStore = await saveDefaultStore(nextStores[0].id)
+          } catch (defaultError) {
+            console.error(defaultError)
+          }
+
           setDefaultStore(nextDefaultStore)
           setStores((currentStores) =>
             currentStores.map((store) => ({
