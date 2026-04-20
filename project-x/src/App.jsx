@@ -6,6 +6,7 @@ import MainLayout from './layout/MainLayout.jsx'
 import Apps from './pages/Apps.jsx'
 import AddProduct from './pages/AddProduct.jsx'
 import BlogPost from './pages/BlogPost.jsx'
+import Categories from './pages/Categories.jsx'
 import CustomerDetails from './pages/CustomerDetails.jsx'
 import Customers from './pages/Customers.jsx'
 import Coupons from './pages/Coupons.jsx'
@@ -136,6 +137,7 @@ function App() {
             <Route path="/onboarding/:storeId" element={<Dashboard />} />
             <Route path="/stores" element={<Stores />} />
             <Route path="/products" element={<Products />} />
+            <Route path="/categories" element={<Categories />} />
             <Route path="/products/new" element={<AddProduct />} />
             <Route path="/products/edit/:id" element={<AddProduct />} />
             <Route path="/orders" element={<Orders />} />

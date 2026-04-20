@@ -10,6 +10,7 @@ const routeTitles = [
   { match: /^\/onboarding(\/step-\d+)?$/, title: 'Dashboard' },
   { match: /^\/stores$/, title: 'All Stores' },
   { match: /^\/products$/, title: 'Products' },
+  { match: /^\/categories$/, title: 'Categories' },
   { match: /^\/products\/new$/, title: 'Add Product' },
   { match: /^\/products\/edit\/[^/]+$/, title: 'Edit Product' },
   { match: /^\/orders$/, title: 'Orders' },
@@ -50,7 +51,6 @@ function Header({ onMenuToggle }) {
   const notificationMenuRef = useRef(null)
   const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false)
   const {
-    currentUser,
     currentStore,
     notifications,
     hasUnreadNotifications,
@@ -217,59 +217,53 @@ function Header({ onMenuToggle }) {
           </div>
         ) : null}
 
-        {currentUser?.email ? (
-          <div className="app-header__user">
-            <span>{currentUser.email}</span>
-          </div>
-        ) : null}
-
         <Button className="app-header__logout" onClick={handleLogout} variant="outline">
           Logout
         </Button>
 
-        <IconButton aria-label="Settings">
+        <IconButton className="header-icon-button" aria-label="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
-              d="M10.325 4.317a1 1 0 0 1 1.35-.936l.325.156a1 1 0 0 0 .86 0l.325-.156a1 1 0 0 1 1.35.936v.378a1 1 0 0 0 .51.87l.328.189a1 1 0 0 1 .366 1.366l-.19.328a1 1 0 0 0 0 1l.19.328a1 1 0 0 1-.366 1.366l-.328.19a1 1 0 0 0-.51.869v.378a1 1 0 0 1-1.35.936l-.325-.156a1 1 0 0 0-.86 0l-.325.156a1 1 0 0 1-1.35-.936v-.378a1 1 0 0 0-.51-.87l-.328-.189a1 1 0 0 1-.366-1.366l.19-.328a1 1 0 0 0 0-1l-.19-.328a1 1 0 0 1 .366-1.366l.328-.19a1 1 0 0 0 .51-.869v-.378Z"
+              d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z"
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="1.5"
+              strokeWidth="1.7"
             />
-            <circle
-              cx="12"
-              cy="12"
-              r="3"
+            <path
+              d="M19.43 13.15a7.84 7.84 0 0 0 .05-2.3l2.02-1.58-2-3.46-2.53 1.02a8.25 8.25 0 0 0-1.99-1.15L14.6 3h-5.2l-.38 2.68a8.25 8.25 0 0 0-1.99 1.15L4.5 5.81l-2 3.46 2.02 1.58a7.84 7.84 0 0 0 .05 2.3L2.5 14.73l2 3.46 2.55-1.03c.6.47 1.27.85 1.97 1.14L9.4 21h5.2l.38-2.7c.7-.29 1.37-.67 1.97-1.14l2.55 1.03 2-3.46-2.07-1.58Z"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.7"
             />
           </svg>
         </IconButton>
 
         <div className="header-notifications" ref={notificationMenuRef}>
           <IconButton
-            className={`header-icon-button--notification${hasUnreadNotifications ? ' is-active' : ''}`}
+            className={`header-icon-button header-icon-button--notification${hasUnreadNotifications ? ' is-active' : ''}`}
             aria-label="Notifications"
             onClick={handleNotificationToggle}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5"
+                d="M18 9.75a6 6 0 1 0-12 0c0 7.25-2.25 7.25-2.25 7.25h16.5S18 17 18 9.75Z"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="1.5"
+                strokeWidth="1.7"
               />
               <path
-                d="M9 17a3 3 0 0 0 6 0"
+                d="M9.75 19.25a2.5 2.5 0 0 0 4.5 0"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="1.5"
+                strokeWidth="1.7"
               />
             </svg>
             {hasUnreadNotifications ? <span className="notification-dot" aria-hidden="true" /> : null}

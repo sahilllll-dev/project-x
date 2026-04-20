@@ -101,17 +101,6 @@
   position: relative;
 }
 
-.app-header__user {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 12px;
-  border: 1px solid #eee;
-  border-radius: 10px;
-  background: #fff;
-  color: #4b5563;
-  font-size: 0.875rem;
-}
-
 .app-header__logout {
   display: inline-flex;
   align-items: center;
@@ -270,9 +259,6 @@
     gap: 8px;
   }
 
-  .app-header__user {
-    display: none;
-  }
 }
 
 @media (max-width: 720px) {

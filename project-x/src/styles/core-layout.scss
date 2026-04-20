@@ -1883,6 +1883,174 @@
   cursor: pointer;
 }
 
+.categories-page {
+  display: grid;
+  gap: 18px;
+}
+
+.categories-card {
+  overflow: hidden;
+}
+
+.categories-table__head,
+.categories-table__row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 1fr) minmax(160px, 1fr) 150px;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+}
+
+.categories-table__head {
+  background: #f7f8fb;
+  color: #6b7280;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.categories-table__row + .categories-table__row {
+  border-top: 1px solid #eef1f5;
+}
+
+.categories-table__row:hover {
+  background: #fcfcfd;
+}
+
+.categories-table__name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-left: calc(var(--category-depth, 0) * 22px);
+}
+
+.categories-table__name strong {
+  min-width: 0;
+  color: #20242d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categories-table__branch {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-left: 1px solid #d1d5db;
+  border-bottom: 1px solid #d1d5db;
+  border-bottom-left-radius: 6px;
+}
+
+.categories-table__slug {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categories-table__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.categories-empty-state {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 36px 20px;
+  text-align: center;
+}
+
+.categories-empty-state strong {
+  color: #111827;
+  font-size: 1.05rem;
+}
+
+.categories-empty-state p {
+  max-width: 360px;
+  margin: 0;
+  color: #6b7280;
+}
+
+.categories-skeleton {
+  display: grid;
+  gap: 0;
+}
+
+.categories-skeleton__row {
+  height: 58px;
+  border-bottom: 1px solid #eef1f5;
+  background:
+    linear-gradient(90deg, transparent 0 16px, #edf0f4 16px 180px, transparent 180px 220px),
+    linear-gradient(90deg, transparent 0 35%, #edf0f4 35% 50%, transparent 50% 55%),
+    linear-gradient(90deg, transparent 0 62%, #edf0f4 62% 78%, transparent 78% 100%),
+    linear-gradient(90deg, #fff 0%, #f8fafc 48%, #fff 100%);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 220% 100%;
+  animation: categories-skeleton-pulse 1.15s ease-in-out infinite;
+}
+
+.categories-skeleton__row:last-child {
+  border-bottom: 0;
+}
+
+@keyframes categories-skeleton-pulse {
+  0% {
+    background-position: 0 0, 0 0, 0 0, 120% 0;
+  }
+
+  100% {
+    background-position: 0 0, 0 0, 0 0, -120% 0;
+  }
+}
+
+.category-modal {
+  width: min(100%, 520px);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.category-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.category-modal__header h3 {
+  margin: 0;
+  color: #111827;
+}
+
+.category-modal__header p {
+  margin: 5px 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.category-modal__header button {
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.category-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+
 .order-details-page {
   display: grid;
   gap: 16px;
@@ -2189,6 +2357,7 @@
   .products-card,
   .orders-table,
   .customers-table,
+  .categories-table,
   .coupons-table,
   .stores-list-card {
     overflow-x: auto;
@@ -2208,6 +2377,11 @@
   .customers-table__head,
   .customers-table__row {
     min-width: 680px;
+  }
+
+  .categories-table__head,
+  .categories-table__row {
+    min-width: 760px;
   }
 
   .coupons-table__head,

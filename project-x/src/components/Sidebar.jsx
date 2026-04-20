@@ -20,6 +20,7 @@ import themesIcon from '../assets/Dashboard Icons/Themes.svg'
 const mainMenuItems = [
   { label: 'Dashboard', to: '/dashboard', icon: dashboardIcon },
   { label: 'Products', to: '/products', icon: productsIcon },
+  { label: 'Categories', to: '/categories', icon: pagesIcon },
   { label: 'Orders', to: '/orders', icon: ordersIcon },
   {
     label: 'Marketing',

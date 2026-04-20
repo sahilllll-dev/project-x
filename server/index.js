@@ -381,6 +381,22 @@ function toProduct(row) {
   }
 }
 
+function toCategory(row) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    storeId: row.store_id,
+    name: row.name ?? '',
+    slug: row.slug ?? '',
+    parentId: row.parent_id ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
 function toCoupon(row) {
   if (!row) {
     return null
@@ -866,6 +882,153 @@ app.delete('/products/:id', async (req, res) => {
   if (error) return sendInvalidData(res, error)
   if (!data) return res.status(404).json({ message: 'Product not found' })
   res.json({ message: 'Product deleted successfully' })
+})
+
+app.get('/categories', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: true })
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Categories table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.json(data.map(toCategory))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.post('/categories', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const name = String(req.body.name ?? '').trim()
+    const slug = normalizeStoreSlug(req.body.slug ?? name)
+
+    if (!name) return res.status(400).json({ message: 'Category name is required' })
+    if (!slug) return res.status(400).json({ message: 'Category slug is required' })
+
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([
+        {
+          store_id: storeId,
+          name,
+          slug,
+          parent_id: req.body.parentId || req.body.parent_id || null,
+        },
+      ])
+      .select()
+      .single()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'Category slug already exists' })
+    }
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Categories table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.status(201).json(toCategory(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.put('/categories/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const update = {}
+
+    if (req.body.name !== undefined) {
+      const name = String(req.body.name ?? '').trim()
+      if (!name) return res.status(400).json({ message: 'Category name is required' })
+      update.name = name
+    }
+
+    if (req.body.slug !== undefined) {
+      const slug = normalizeStoreSlug(req.body.slug)
+      if (!slug) return res.status(400).json({ message: 'Category slug is required' })
+      update.slug = slug
+    }
+
+    if (req.body.parentId !== undefined || req.body.parent_id !== undefined) {
+      update.parent_id = req.body.parentId || req.body.parent_id || null
+    }
+
+    let query = supabase
+      .from('categories')
+      .update(update)
+      .eq('id', req.params.id)
+
+    const storeId = getRequestStoreId(req)
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query.select().maybeSingle()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'Category slug already exists' })
+    }
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Categories table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Category not found' })
+
+    res.json(toCategory(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.delete('/categories/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    let query = supabase
+      .from('categories')
+      .delete()
+      .eq('id', req.params.id)
+
+    const storeId = getRequestStoreId(req)
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+
+    const { data, error } = await query.select('id').maybeSingle()
+
+    if (error?.code === '42P01') {
+      return res.status(500).json({ message: 'Categories table is missing' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Category not found' })
+
+    res.json({ message: 'Category deleted successfully' })
+  } catch (error) {
+    sendServerError(res, error)
+  }
 })
 
 app.post('/coupons', async (req, res) => {
