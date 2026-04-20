@@ -1559,6 +1559,15 @@ app.get('/store-page/:storeId', async (req, res) => {
     .eq('slug', slug)
     .maybeSingle()
 
+  if (error?.code === '42P01') {
+    return res.json({
+      storeId: req.params.storeId,
+      name: 'homepage',
+      slug,
+      layout: null,
+    })
+  }
+
   if (error) return sendInvalidData(res, error)
 
   if (!data) {
@@ -1566,7 +1575,7 @@ app.get('/store-page/:storeId', async (req, res) => {
       storeId: req.params.storeId,
       name: 'homepage',
       slug,
-      layout: getDefaultPageLayout(),
+      layout: null,
     })
   }
 

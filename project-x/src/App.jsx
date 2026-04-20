@@ -23,8 +23,6 @@ import Signup from './pages/Signup.jsx'
 import StoreFront from './pages/store/StoreFront.jsx'
 import Stores from './pages/Stores.jsx'
 import Themes from './pages/Themes.jsx'
-import ThemeEditor from './pages/ThemeEditor.jsx'
-import ThemeSettings from './pages/ThemeSettings.jsx'
 import VisualEditor from './pages/VisualEditor.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import { useToast } from './context/ToastContext.jsx'
@@ -147,9 +145,7 @@ function App() {
             <Route path="/customers/:id" element={<CustomerDetails />} />
             <Route path="/payments" element={<Payments />} />
             <Route path="/themes" element={<Themes />} />
-            <Route path="/dashboard/themes/editor" element={<ThemeEditor />} />
             <Route path="/dashboard/editor" element={<VisualEditor />} />
-            <Route path="/dashboard/theme-settings" element={<ThemeSettings />} />
             <Route path="/dashboard/coupons" element={<Coupons />} />
             <Route path="/apps" element={<Apps />} />
             <Route path="/pages" element={<Pages />} />

@@ -99,13 +99,20 @@ function StoreFront() {
           getProducts(matchedStore.id),
           getStoreApps(matchedStore.id),
         ])
-        const page = await getStorePage(matchedStore.id)
         console.log('Products:', response)
         setUseSeoProductUrls(
           installedApps.some((storeApp) => storeApp.appId === 'seo-helper' && storeApp.enabled),
         )
-        setProducts(response.filter((product) => product.status === 'active'))
-        setPageLayout(page.layout)
+        const activeProducts = response.filter((product) => product.status === 'active')
+        setProducts(activeProducts.length > 0 ? activeProducts : response)
+
+        try {
+          const page = await getStorePage(matchedStore.id)
+          setPageLayout(page.layout)
+        } catch (pageError) {
+          console.error(pageError)
+          setPageLayout(null)
+        }
       } catch (error) {
         console.error(error)
         setStore({
