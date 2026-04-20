@@ -12,6 +12,7 @@ import Coupons from './pages/Coupons.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Login from './pages/Login.jsx'
 import Marketing from './pages/Marketing.jsx'
+import NewStoreOnboarding from './pages/NewStoreOnboarding.jsx'
 import OrderDetails from './pages/dashboard/OrderDetails.jsx'
 import Orders from './pages/dashboard/Orders.jsx'
 import Pages from './pages/Pages.jsx'
@@ -131,7 +132,8 @@ function App() {
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/onboarding" element={<Dashboard />} />
-            <Route path="/onboarding/:stepSlug" element={<Dashboard />} />
+            <Route path="/onboarding/new" element={<NewStoreOnboarding />} />
+            <Route path="/onboarding/:storeId" element={<Dashboard />} />
             <Route path="/stores" element={<Stores />} />
             <Route path="/products" element={<Products />} />
             <Route path="/products/new" element={<AddProduct />} />

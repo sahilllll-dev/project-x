@@ -10,12 +10,13 @@ function MainLayout() {
   const { currentStore, isAppReady } = useAppContext()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const isOnboardingRoute = location.pathname.startsWith('/onboarding')
+  const isStoresRoute = location.pathname.startsWith('/stores')
 
   useEffect(() => {
-    if (isAppReady && !currentStore && !isOnboardingRoute) {
-      navigate('/onboarding', { replace: true })
+    if (isAppReady && !currentStore && !isOnboardingRoute && !isStoresRoute) {
+      navigate('/onboarding/new', { replace: true })
     }
-  }, [currentStore, isAppReady, isOnboardingRoute, navigate])
+  }, [currentStore, isAppReady, isOnboardingRoute, isStoresRoute, navigate])
 
   useEffect(() => {
     setIsMobileSidebarOpen(false)

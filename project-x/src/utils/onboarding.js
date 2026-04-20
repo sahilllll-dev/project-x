@@ -7,5 +7,5 @@ export function getStoreDestination(store) {
     return '/dashboard'
   }
 
-  return `/onboarding/step-${Number(store.onboardingStep) || 1}`
+  return `/onboarding/${store.id}`
 }

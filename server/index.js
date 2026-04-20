@@ -1071,6 +1071,15 @@ app.put('/stores/:id', async (req, res) => {
   res.json(toStore(data))
 })
 
+app.get('/stores/detail/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const { data, error } = await supabase.from('stores').select('*').eq('id', req.params.id).maybeSingle()
+  if (error) return res.status(500).json({ error })
+  if (!data) return res.status(404).json({ message: 'Store not found' })
+  res.json(toStore(data))
+})
+
 app.delete('/stores/:id', async (req, res) => {
   if (!requireSupabase(res)) return
   const { error } = await supabase.from('stores').delete().eq('id', req.params.id)
@@ -1123,7 +1132,12 @@ app.get('/store/check-slug', async (req, res) => {
     slug = normalizeStoreSlug(slug)
     if (!slug) return res.status(400).json({ available: false, error: 'Invalid slug' })
 
-    let query = supabase.from('stores').select('id').eq('slug', slug)
+    const subdomain = normalizeStoreSubdomain(slug)
+    const fullSubdomain = normalizeStoreUrl(slug)
+    let query = supabase
+      .from('stores')
+      .select('id')
+      .or(`slug.eq.${slug},slug.eq.${subdomain},subdomain.eq.${slug},subdomain.eq.${subdomain},subdomain.eq.${fullSubdomain}`)
     if (req.query.excludeStoreId) query = query.neq('id', req.query.excludeStoreId)
     const { data, error } = await query.maybeSingle()
     if (error) return res.status(500).json({ available: false, error: 'Error checking slug' })

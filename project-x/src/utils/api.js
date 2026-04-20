@@ -207,6 +207,10 @@ export function updateStore(storeId, data) {
   })
 }
 
+export function getStoreById(storeId) {
+  return request(`/stores/detail/${storeId}`)
+}
+
 export function getStoresByUserId(userId) {
   return request(`/stores/${userId}`)
 }

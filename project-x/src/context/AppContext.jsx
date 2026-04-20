@@ -127,6 +127,10 @@ export function AppProvider({ children }) {
           return
         }
 
+        if (!currentStore?.id && !currentStore?.url) {
+          return
+        }
+
         const matchingStore = stores.find((store) => {
           if (currentStore?.id && store.id === currentStore.id) {
             return true

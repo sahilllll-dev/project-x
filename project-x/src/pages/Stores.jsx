@@ -43,7 +43,7 @@ function Stores() {
 
   function handleAddNewStore() {
     setCurrentStore(null)
-    navigate('/onboarding/step-1')
+    navigate('/onboarding/new')
   }
 
   async function handleDeleteStore(storeId) {

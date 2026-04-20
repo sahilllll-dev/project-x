@@ -4,7 +4,7 @@ import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { checkStoreSlug, createStore, getProducts, updateStore } from '../utils/api.js'
+import { checkStoreSlug, getProducts, getStoreById, updateStore } from '../utils/api.js'
 
 const setupSteps = ['Store Settings', 'Add Products', 'Sell Online']
 
@@ -51,7 +51,7 @@ function formatDate(value) {
 
 function Dashboard() {
   const navigate = useNavigate()
-  const { stepSlug = '' } = useParams()
+  const { storeId = '' } = useParams()
   const { currentUser, currentStore, notifications, setCurrentStore } = useAppContext()
   const { showToast } = useToast()
   const [storeName, setStoreName] = useState('')
@@ -68,22 +68,46 @@ function Dashboard() {
   const [createdStoreUrl, setCreatedStoreUrl] = useState('')
   const [initialStoreFormSnapshot, setInitialStoreFormSnapshot] = useState('')
   const [formStoreId, setFormStoreId] = useState(null)
+  const [isHydratingStore, setIsHydratingStore] = useState(Boolean(storeId))
   const lastTakenUrlToastRef = useRef('')
   const lowStockToastRef = useRef(new Set())
   const storeLink = getStoreLink(createdStoreUrl || storeUrl)
   const storeSlug = getStoreUrlSlug(storeUrl)
-  const routeOnboardingStep = Number(stepSlug.replace('step-', ''))
-  const isEditingExistingStore = Boolean(currentStore?.id)
-  const isDraftStore =
-    isEditingExistingStore &&
-    !String(currentStore?.name ?? '').trim() &&
-    !String(currentStore?.url ?? '').trim()
   const storeFormSnapshot = JSON.stringify({
     name: storeName.trim(),
     url: storeUrl.trim().toLowerCase(),
   })
   const hasStoreFormChanges = storeFormSnapshot !== initialStoreFormSnapshot
   const recentOrders = notifications.slice(0, 5)
+
+  useEffect(() => {
+    async function hydrateStore() {
+      if (!storeId) {
+        setIsHydratingStore(false)
+        return
+      }
+
+      if (currentStore?.id === storeId) {
+        setIsHydratingStore(false)
+        return
+      }
+
+      setIsHydratingStore(true)
+
+      try {
+        const nextStore = await getStoreById(storeId)
+        setCurrentStore(nextStore)
+      } catch (error) {
+        console.error(error)
+        showToast('Store not found', 'error')
+        navigate('/stores', { replace: true })
+      } finally {
+        setIsHydratingStore(false)
+      }
+    }
+
+    hydrateStore()
+  }, [currentStore?.id, navigate, setCurrentStore, showToast, storeId])
 
   useEffect(() => {
     const latestStore = currentStore
@@ -121,7 +145,7 @@ function Dashboard() {
         url: nextStoreUrl.trim().toLowerCase(),
       }),
     )
-    const resolvedStep = routeOnboardingStep || Number(latestStore.onboardingStep) || 1
+    const resolvedStep = Number(latestStore.onboardingStep) || 1
 
     if (resolvedStep >= 3 || hasProducts) {
       setActiveStep('sell-online')
@@ -134,7 +158,7 @@ function Dashboard() {
     }
 
     setActiveStep('store-settings')
-  }, [currentStore, hasProducts, routeOnboardingStep])
+  }, [currentStore, hasProducts])
 
   useEffect(() => {
     async function loadProducts() {
@@ -300,7 +324,7 @@ function Dashboard() {
       return
     }
 
-    if (!isFormValid || !currentUser?.id || (isEditingExistingStore && !hasStoreFormChanges)) {
+    if (!isFormValid || !currentUser?.id || !currentStore?.id || !hasStoreFormChanges) {
       return
     }
 
@@ -314,27 +338,12 @@ function Dashboard() {
         ownerEmail: currentUser.email ?? '',
         onboardingStep: 2,
       }
-      let nextStore
-      if (isEditingExistingStore) {
-        nextStore = await updateStore(currentStore.id, storePayload)
-      } else {
-        const createPayload = {
-          userId: currentUser.id,
-          ...storePayload,
-        }
-        console.log('Creating store with:', createPayload)
-        nextStore = await createStore(createPayload)
-      }
+      const nextStore = await updateStore(currentStore.id, storePayload)
 
       setCurrentStore(nextStore)
       setIsStoreCreated(true)
       setHasProducts(false)
-      showToast(
-        isEditingExistingStore && !isDraftStore
-          ? 'Store updated successfully'
-          : 'Store created successfully',
-        'success',
-      )
+      showToast('Store updated successfully', 'success')
       setCreatedStoreUrl(nextStore.url)
       setInitialStoreFormSnapshot(
         JSON.stringify({
@@ -400,6 +409,29 @@ function Dashboard() {
       console.error(error)
       showToast('Something went wrong, please try again', 'error')
     }
+  }
+
+  if (isHydratingStore) {
+    return <p className="product-empty-state">Loading store...</p>
+  }
+
+  if (!currentStore?.id) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-intro">
+          <h2>No store selected</h2>
+          <p>Select an existing store or create a new one to continue onboarding.</p>
+        </div>
+        <SurfaceCard className="form-card">
+          <Button onClick={() => navigate('/stores')} variant="outline">
+            View Stores
+          </Button>
+          <Button onClick={() => navigate('/onboarding/new')}>
+            Create New Store
+          </Button>
+        </SurfaceCard>
+      </div>
+    )
   }
 
   return (
@@ -602,11 +634,11 @@ function Dashboard() {
 
                   <Button
                     className="dashboard-create-button"
-                    disabled={!isFormValid || (isEditingExistingStore && !hasStoreFormChanges)}
+                    disabled={!isFormValid || !hasStoreFormChanges}
                     fullWidth
                     type="submit"
                   >
-                    {isEditingExistingStore && !isDraftStore ? 'Update Store' : 'Create Store'}
+                    Update Store
                   </Button>
                 </SurfaceCard>
               )}
