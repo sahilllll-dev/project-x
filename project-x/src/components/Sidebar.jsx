@@ -29,13 +29,6 @@ const mainMenuItems = [
       { label: 'Coupons', to: '/dashboard/coupons' },
     ],
   },
-  {
-    label: 'Content',
-    icon: pagesIcon,
-    children: [
-      { label: 'Blogs', to: '/blogs' },
-    ],
-  },
   { label: 'Customers', to: '/customers', icon: customersIcon },
   { label: 'Payments', to: '/payments', icon: paymentsIcon },
 ]

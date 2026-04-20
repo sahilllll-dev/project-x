@@ -24,9 +24,6 @@ const routeTitles = [
   { match: /^\/dashboard\/coupons$/, title: 'Coupons' },
   { match: /^\/apps$/, title: 'Apps' },
   { match: /^\/pages$/, title: 'Pages' },
-  { match: /^\/blogs$/, title: 'Blogs' },
-  { match: /^\/blogs\/create$/, title: 'Create Blog' },
-  { match: /^\/blog-post$/, title: 'Blogs' },
 ]
 
 function getStoreUrlSlug(value) {

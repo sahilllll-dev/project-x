@@ -37,7 +37,7 @@ const HERO_BANNERS = [
 
 const BRANDS = ['Aster', 'Mode', 'North', 'Urban', 'Studio', 'Nova']
 
-const NAV_ITEMS = ['Home', 'Shop', 'Products', 'Pages', 'Blog']
+const NAV_ITEMS = ['Home', 'Shop', 'Products', 'Pages']
 
 const CATEGORY_LINKS = ['Women', 'Men', 'Accessories', 'Shoes']
 const FOOTER_LINKS = ['About Us', 'Contact', 'Shipping', 'Returns']
