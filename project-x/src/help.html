@@ -1,0 +1,1372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project X AI Agent Brief</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f6f1e8;
+        color: #17130c;
+        font-family: Georgia, "Times New Roman", serif;
+        line-height: 1.55;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 48px 24px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.15;
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 42px;
+      }
+
+      h2 {
+        margin-top: 42px;
+        border-top: 1px solid #d8cbb7;
+        padding-top: 24px;
+      }
+
+      pre {
+        overflow: auto;
+        border: 1px solid #d8cbb7;
+        border-radius: 14px;
+        background: #fffaf1;
+        padding: 18px;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .note {
+        border-left: 4px solid #8f5c25;
+        background: #fff8ea;
+        padding: 14px 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Project X AI Agent Brief</h1>
+      <p class="note">
+        Copy everything below and paste it into ChatGPT, Gemini, or another AI
+        agent. This file intentionally uses placeholder environment values and
+        does not include real secrets.
+      </p>
+
+      <pre><code>You are helping me work on a project called Project X located at:
+
+/Users/sahilansari/My Disk/Project X
+
+This is a multi-store ecommerce SaaS/admin platform. It has a React frontend, an Express backend, Supabase auth/database, and public storefront routes.
+
+Do not assume this is a simple static site. It has:
+- Admin authentication
+- Store onboarding
+- Multi-store management
+- Product CRUD
+- Orders and customer management
+- Coupons
+- Themes
+- Page builder / visual editor
+- Public storefronts
+- Store-specific apps such as SEO Helper
+- Supabase database schema and migrations
+- Backend API that uses the Supabase service role key
+
+Important: never expose or ask me to paste real .env secrets. Use placeholders for secret values.
+
+
+HIGH-LEVEL ARCHITECTURE
+
+The repository has three main parts:
+
+1. Frontend
+- Folder: project-x
+- Framework: Vite + React
+- Router: react-router-dom
+- Styling: SCSS
+- Supabase client auth via @supabase/supabase-js
+- Calls backend API through src/utils/api.js
+
+2. Backend
+- Folder: server
+- Runtime: Node.js
+- Framework: Express
+- Database/auth admin access: Supabase service role client
+- Main file: server/index.js
+- Provides REST API endpoints for products, orders, customers, stores, themes, pages, apps, login, and users
+
+3. Database
+- Folder: supabase
+- Main schema: supabase/schema.sql
+- Migrations: supabase/migrations/*.sql
+- Uses Supabase/Postgres tables with RLS policies in schema
+
+
+FILE STRUCTURE
+
+Project X/
+├── SUPABASE_SETUP.md
+├── supabase/
+│   ├── schema.sql
+│   └── migrations/
+│       ├── 20260420_default_store.sql
+│       ├── 20260420_full_app_supabase_storage.sql
+│       ├── 20260420_store_pages.sql
+│       ├── 20260420_theme_master_tables.sql
+│       └── 20260420_unique_store_slug.sql
+├── server/
+│   ├── .env.example
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── index.js
+│   └── supabaseAdmin.js
+└── project-x/
+    ├── .env.example
+    ├── package.json
+    ├── package-lock.json
+    ├── vite.config.js
+    ├── vercel.json
+    ├── index.html
+    ├── README.md
+    └── src/
+        ├── main.jsx
+        ├── App.jsx
+        ├── assets/
+        ├── components/
+        │   ├── ApiProgressBar.jsx
+        │   ├── Header.jsx
+        │   ├── ListViewContainer.jsx
+        │   ├── OrderTimeline.jsx
+        │   ├── ProtectedRoute.jsx
+        │   ├── Sidebar.jsx
+        │   ├── page-builder/
+        │   │   ├── PageRenderer.jsx
+        │   │   └── WidgetRenderer.jsx
+        │   ├── themes/
+        │   │   ├── KallesTheme.jsx
+        │   │   ├── MinimalTheme.jsx
+        │   │   ├── ModernTheme.jsx
+        │   │   └── ThemeRenderer.jsx
+        │   └── ui/
+        │       ├── Button.jsx
+        │       ├── IconButton.jsx
+        │       ├── SurfaceCard.jsx
+        │       └── Toast.jsx
+        ├── context/
+        │   ├── AppContext.jsx
+        │   ├── StoreContext.jsx
+        │   └── ToastContext.jsx
+        ├── layout/
+        │   ├── AuthLayout.jsx
+        │   └── MainLayout.jsx
+        ├── pages/
+        │   ├── AddProduct.jsx
+        │   ├── Apps.jsx
+        │   ├── BlogPost.jsx
+        │   ├── Coupons.jsx
+        │   ├── CustomerDetails.jsx
+        │   ├── Customers.jsx
+        │   ├── Dashboard.jsx
+        │   ├── Login.jsx
+        │   ├── Marketing.jsx
+        │   ├── NewStoreOnboarding.jsx
+        │   ├── Pages.jsx
+        │   ├── Payments.jsx
+        │   ├── Products.jsx
+        │   ├── Signup.jsx
+        │   ├── Stores.jsx
+        │   ├── Themes.jsx
+        │   ├── VisualEditor.jsx
+        │   ├── dashboard/
+        │   │   ├── OrderDetails.jsx
+        │   │   └── Orders.jsx
+        │   └── store/
+        │       ├── ProductDetail.jsx
+        │       └── StoreFront.jsx
+        ├── styles/
+        │   ├── _product-form.scss
+        │   ├── _toast.scss
+        │   ├── core-layout.scss
+        │   ├── form-styles.scss
+        │   ├── globals.scss
+        │   ├── header-styles.scss
+        │   ├── sidebar-styles.scss
+        │   ├── variables.scss
+        │   └── themes/
+        │       └── _kalles.scss
+        └── utils/
+            ├── api.js
+            ├── auth.js
+            ├── onboarding.js
+            ├── productUrls.js
+            ├── storeAvatar.js
+            ├── supabase.js
+            └── themeConfig.js
+
+
+FRONTEND PACKAGE
+
+Frontend folder:
+
+project-x
+
+Important scripts:
+
+npm run dev
+npm run build
+npm run lint
+npm run preview
+
+Important frontend dependencies:
+
+- @dnd-kit/core
+- @supabase/supabase-js
+- react
+- react-dom
+- react-router-dom
+- sass
+- vite
+
+Frontend env variables:
+
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+VITE_API_BASE_URL=http://localhost:5001
+
+Frontend entry point:
+
+project-x/src/main.jsx
+
+It wraps the app like this:
+
+&lt;StrictMode&gt;
+  &lt;StoreProvider&gt;
+    &lt;AppProvider&gt;
+      &lt;BrowserRouter&gt;
+        &lt;ToastProvider&gt;
+          &lt;App /&gt;
+        &lt;/ToastProvider&gt;
+      &lt;/BrowserRouter&gt;
+    &lt;/AppProvider&gt;
+  &lt;/StoreProvider&gt;
+&lt;/StrictMode&gt;
+
+Global state order:
+
+1. StoreProvider
+2. AppProvider
+3. BrowserRouter
+4. ToastProvider
+5. App
+
+
+FRONTEND ROUTING
+
+Main routes are in:
+
+project-x/src/App.jsx
+
+Public/auth routes:
+
+/                 - If on a Project X store subdomain, render StoreFront; otherwise redirect to /login
+/login            - Login page
+/signup           - Signup page
+/store/:storeName - Public storefront
+/product/:slug    - Public product detail page
+
+Protected admin routes:
+
+/dashboard
+/onboarding
+/onboarding/new
+/onboarding/:storeId
+/stores
+/products
+/products/new
+/products/edit/:id
+/orders
+/orders/:id
+/marketing
+/customers
+/customers/:id
+/payments
+/themes
+/dashboard/editor
+/dashboard/coupons
+/apps
+/pages
+/blog-post
+
+Protected routes use:
+
+project-x/src/components/ProtectedRoute.jsx
+
+ProtectedRoute checks currentUser from AppContext. If no user exists, it redirects to /login.
+
+
+AUTH SYSTEM
+
+Important files:
+
+project-x/src/utils/supabase.js
+project-x/src/utils/auth.js
+project-x/src/pages/Login.jsx
+project-x/src/pages/Signup.jsx
+project-x/src/components/ProtectedRoute.jsx
+
+supabase.js creates a Supabase browser client using:
+
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
+
+It exports:
+
+signUpWithSupabase({ email, password })
+signInWithSupabase({ email, password })
+signOutFromSupabase()
+getSupabaseSessionUser()
+isSupabaseConfigured
+supabase
+
+Signup flow:
+
+Signup.jsx
+-&gt; signUpWithSupabase()
+-&gt; Supabase email verification redirect points to /login?verified=true
+
+Login flow:
+
+Login.jsx
+-&gt; If Supabase configured, call signInWithSupabase()
+-&gt; Else fallback to backend /login endpoint
+-&gt; Store user in localStorage under currentUser and projectx_admin_session
+-&gt; Call initializeUserContext(sessionUser)
+-&gt; Navigate to dashboard or previous route
+
+Local auth/session helper storage:
+
+projectx_admin_session
+
+App user context storage:
+
+currentUser
+
+Important security note:
+
+The frontend does not attach Supabase access tokens to backend API requests. The backend uses a service role key and trusts request body/query params. This is functional for local/dev but not secure for production unless authorization checks are added.
+
+
+APP STATE / CONTEXT
+
+Important context files:
+
+project-x/src/context/AppContext.jsx
+project-x/src/context/StoreContext.jsx
+project-x/src/context/ToastContext.jsx
+
+StoreContext owns:
+
+currentStore
+stores
+storeSwitchVersion
+setCurrentStore()
+setStores()
+
+StoreContext normalizes stores by ensuring:
+
+themeConfig
+onboardingStep
+isOnboardingCompleted
+isDefault
+
+AppContext owns:
+
+currentUser
+currentStore
+stores
+notifications
+storeApps
+hasUnreadNotifications
+isAppReady
+isStoreReady
+defaultStoreId
+setCurrentUser()
+setCurrentStore()
+setStores()
+setDefaultStore()
+markNotificationsAsRead()
+setStoreApps()
+refreshStoreApps()
+isAppEnabled(appId)
+initializeUserContext(user)
+clearAppContext()
+
+Important localStorage keys:
+
+currentUser
+storeApps
+storeNotifications
+defaultStoreByUser
+
+When a user logs in, initializeUserContext(user) loads all stores for the user using:
+
+getStoresByUserId(user.id)
+
+It chooses the current/default store in this order:
+
+1. store with isDefault true
+2. locally remembered default store
+3. first store
+
+Notifications:
+
+AppContext polls orders every 15 seconds for currentStore.id.
+If latest order timestamp increases, it dispatches projectx:new-order.
+App.jsx listens for projectx:new-order and shows toast + notification sound.
+
+
+FRONTEND API WRAPPER
+
+File:
+
+project-x/src/utils/api.js
+
+Base URL:
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'
+
+The API wrapper dispatches a global loading event:
+
+projectx:api-activity
+
+Used by:
+
+project-x/src/components/ApiProgressBar.jsx
+
+Main exported API functions:
+
+getProducts(storeId)
+getProductBySlug(slug, storeId)
+createProduct(data)
+updateProduct(id, data)
+deleteProduct(id, storeId)
+
+getOrders(storeId)
+getOrder(id, storeId)
+createOrder(data)
+updateOrderStatus(id, data)
+payOrder(id, method, storeId)
+
+getCoupons(storeId)
+validateCoupon(code, storeId, orderAmount)
+createCoupon(data)
+updateCoupon(id, data)
+deleteCoupon(id, storeId)
+
+getCustomers(storeId)
+getCustomer(id, storeId)
+createCustomer(data)
+deleteCustomer(id, storeId)
+
+createStore(data)
+updateStore(storeId, data)
+getStoreById(storeId)
+getStoresByUserId(userId)
+getStores()
+deleteStore(storeId)
+setDefaultStore(storeId)
+checkStoreSlug(slug, excludeStoreId)
+getStoreByUrl(subdomain)
+
+getThemes()
+updateStoreTheme(storeId, themeId)
+updateStoreThemeConfig(storeId, themeConfig)
+getActiveTheme(storeId)
+saveThemeConfig(storeId, config)
+
+getStorePage(storeId, slug = '/')
+saveStorePage({ storeId, name, slug, layout })
+
+getApps()
+getStoreApps(storeId)
+installStoreApp(storeId, appId)
+toggleStoreApp(storeId, appId, enabled)
+
+loginUser(data)
+
+
+FRONTEND FEATURE PAGES
+
+Auth:
+
+project-x/src/pages/Login.jsx
+project-x/src/pages/Signup.jsx
+project-x/src/layout/AuthLayout.jsx
+
+Dashboard:
+
+project-x/src/pages/Dashboard.jsx
+
+Dashboard manages:
+
+- Store settings
+- Store URL availability check
+- Logo preview
+- Product existence check
+- Low stock alerts
+- Recent orders
+- Setup flow: Store Settings -&gt; Add Products -&gt; Sell Online
+
+It polls products every 15 seconds and shows low stock toasts when:
+
+product.quantity &lt;= product.lowStockThreshold
+
+Default low stock threshold:
+
+5
+
+New store onboarding:
+
+project-x/src/pages/NewStoreOnboarding.jsx
+
+Creates a new store with:
+
+name
+slug/subdomain
+address1
+address2
+userId
+ownerEmail
+onboardingStep
+isOnboardingCompleted
+
+Temporary store URL format:
+
+{slug}.projectx.com
+
+Products:
+
+project-x/src/pages/Products.jsx
+project-x/src/pages/AddProduct.jsx
+
+Products page supports:
+
+- Search
+- Filter: All, Active, Out of Stock, Disabled
+- Activate/deactivate
+- Delete
+- Edit navigation
+
+Add/Edit product supports:
+
+- title
+- description
+- category
+- price
+- discountedPrice
+- quantity
+- lowStockThreshold
+- sku
+- status
+- main image as base64/data URL
+- gallery image
+- shipping dimensions
+- limitSinglePurchase
+- SEO fields if SEO Helper app enabled
+
+Product SEO fields:
+
+seo: {
+  title,
+  description,
+  slug
+}
+
+Public storefront:
+
+project-x/src/pages/store/StoreFront.jsx
+project-x/src/pages/store/ProductDetail.jsx
+project-x/src/components/themes/ThemeRenderer.jsx
+project-x/src/components/themes/MinimalTheme.jsx
+project-x/src/components/themes/ModernTheme.jsx
+project-x/src/components/themes/KallesTheme.jsx
+
+Storefront can load by:
+
+/store/:storeName
+
+or by hostname/subdomain if hostname ends with:
+
+.projectx.com
+
+It loads:
+
+- Store by subdomain
+- Products for store
+- Installed apps
+- Homepage page layout
+- Theme config
+
+If page builder layout exists, it renders PageRenderer.
+Otherwise it renders ThemeRenderer.
+
+Checkout fields:
+
+- Customer name
+- Email
+- Phone
+- Address
+- Payment method: cod or online
+- Coupon code
+
+Product detail route:
+
+/product/:slug?storeId={storeId}
+
+Orders:
+
+project-x/src/pages/dashboard/Orders.jsx
+project-x/src/pages/dashboard/OrderDetails.jsx
+project-x/src/components/OrderTimeline.jsx
+
+Orders support:
+
+- List orders
+- View order details
+- Update payment/fulfillment/order status
+- Pay order
+- Show timeline events
+
+Customers:
+
+project-x/src/pages/Customers.jsx
+project-x/src/pages/CustomerDetails.jsx
+
+Customers are created/updated automatically during order placement via backend upsertCustomerForOrder.
+
+Coupons:
+
+project-x/src/pages/Coupons.jsx
+
+Coupons support:
+
+- Create
+- Update
+- Delete
+- Validate during checkout
+- Percentage or fixed discount
+- Minimum order value
+- Maximum discount
+- Usage limit
+- Expiry
+- Active/inactive
+
+Themes:
+
+project-x/src/pages/Themes.jsx
+project-x/src/utils/themeConfig.js
+project-x/src/components/themes/
+
+Available theme codes:
+
+minimal
+modern
+kalles
+
+Theme config defaults:
+
+{
+  heroTitle: 'Welcome to your store',
+  showBrands: true,
+  primaryColor: '#000000',
+  font: 'Inter',
+  layout: 'grid'
+}
+
+Visual editor / page builder:
+
+project-x/src/pages/VisualEditor.jsx
+project-x/src/components/page-builder/PageRenderer.jsx
+project-x/src/components/page-builder/WidgetRenderer.jsx
+
+Store pages are saved through:
+
+POST /api/page/save
+
+Loaded through:
+
+GET /store-page/:storeId?slug=/
+
+Apps:
+
+project-x/src/pages/Apps.jsx
+
+Current built-in app list is in server/index.js:
+
+[
+  {
+    id: 'seo-helper',
+    name: 'SEO Helper',
+    description: 'Optimize your product SEO and Google visibility',
+    icon: 'seo-icon',
+    isActive: true
+  }
+]
+
+Installed apps are stored in store_apps.
+
+
+BACKEND PACKAGE
+
+Backend folder:
+
+server
+
+Important scripts:
+
+npm run start
+npm run dev
+
+Backend env variables:
+
+SUPABASE_URL=your-supabase-url
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+PORT=5001
+FRONTEND_URL=http://localhost:5173
+
+Optional email notification settings:
+
+SMTP_HOST=
+SMTP_PORT=
+SMTP_SECURE=
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=
+ORDER_NOTIFICATION_EMAIL=
+
+Main backend file:
+
+server/index.js
+
+Supabase service role helper:
+
+server/supabaseAdmin.js
+
+Backend uses:
+
+createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+Backend CORS allowed origins:
+
+http://localhost:5173
+process.env.FRONTEND_URL
+
+
+BACKEND API ROUTES
+
+Base URL in dev:
+
+http://localhost:5001
+
+Products:
+
+GET    /products?storeId=
+GET    /product/:slug?storeId=
+POST   /products
+PUT    /products/:id
+DELETE /products/:id?storeId=
+
+Product model returned to frontend:
+
+{
+  id,
+  storeId,
+  ownerId,
+  title,
+  description,
+  category,
+  price,
+  discountedPrice,
+  quantity,
+  lowStockThreshold,
+  sku,
+  status,
+  image,
+  imageUrl,
+  galleryImage,
+  limitSinglePurchase,
+  shipping,
+  seo,
+  createdAt,
+  updatedAt
+}
+
+Orders:
+
+GET   /orders?storeId=
+GET   /orders/:id?storeId=
+POST  /orders
+POST  /orders/:id/pay
+PATCH /orders/:id/status
+
+Order creation does:
+
+- Validate storeId
+- Validate coupon if provided
+- Decrement product quantity
+- Insert order
+- Upsert customer
+- Increment coupon used_count
+- Create timeline entry
+- Send optional email notification
+
+Order model returned:
+
+{
+  id,
+  storeId,
+  ownerId,
+  customerId,
+  customerName,
+  customerEmail,
+  phone,
+  products,
+  subtotalAmount,
+  discountAmount,
+  finalAmount,
+  couponCode,
+  totalAmount,
+  paymentMethod,
+  paymentStatus,
+  fulfillmentStatus,
+  orderStatus,
+  shippingAddress,
+  createdAt
+}
+
+Payment behavior:
+
+paymentMethod = online -&gt; paymentStatus = paid
+paymentMethod = cod -&gt; paymentStatus = pending
+
+Coupons:
+
+GET    /coupons?storeId=
+GET    /coupons/:code?storeId=&orderAmount=
+POST   /coupons
+PUT    /coupons/:id
+DELETE /coupons/:id?storeId=
+
+Coupon validation checks:
+
+- Exists
+- Active
+- Not expired
+- Usage limit not exceeded
+- Minimum order value met
+
+Coupon discount supports:
+
+percentage
+fixed
+
+Customers:
+
+GET    /customers?storeId=
+GET    /customers/:id?storeId=
+POST   /customers
+DELETE /customers/:id?storeId=
+
+Stores:
+
+GET    /stores
+POST   /stores
+PUT    /stores/:id
+GET    /stores/detail/:id
+DELETE /stores/:id
+PUT    /stores/:id/default
+GET    /stores/:userId
+GET    /store/check-slug?slug=&excludeStoreId=
+GET    /store-by-url/:subdomain
+
+Store model returned:
+
+{
+  id,
+  userId,
+  ownerId,
+  ownerEmail,
+  name,
+  slug,
+  url,
+  themeId,
+  themeConfig,
+  onboardingStep,
+  isOnboardingCompleted,
+  isDefault,
+  logoUrl,
+  createdAt,
+  updatedAt
+}
+
+Store URL normalization:
+
+slug -&gt; lowercase, trim, replace invalid chars with hyphen
+subdomain -&gt; normalized slug with hyphens removed
+url -&gt; {subdomain}.projectx.com
+
+Themes:
+
+GET  /themes
+PUT  /stores/:id/theme
+PUT  /stores/:id/theme-config
+GET  /api/theme/:storeId
+POST /api/theme/config
+
+Store pages / page builder:
+
+GET  /store-page/:storeId?slug=/
+POST /api/page/save
+
+Apps:
+
+GET  /apps
+GET  /store-apps/:storeId
+POST /store-apps/install
+POST /store-apps/toggle
+
+Auth/admin utility:
+
+POST /login
+GET  /users
+GET  /verify
+
+
+DATABASE SCHEMA SUMMARY
+
+Main schema file:
+
+supabase/schema.sql
+
+Important tables:
+
+profiles
+stores
+products
+orders
+themes
+store_themes
+store_pages
+order_timeline
+customers
+coupons
+store_apps
+
+profiles:
+
+id uuid primary key references auth.users
+email unique not null
+full_name
+created_at
+updated_at
+
+stores:
+
+id uuid primary key
+owner_id uuid references auth.users
+name
+slug unique
+subdomain unique
+address1
+address2
+logo_url
+owner_email
+theme_id
+theme_config jsonb
+onboarding_step
+is_onboarding_completed
+is_default
+created_at
+updated_at
+
+products:
+
+id uuid primary key
+owner_id uuid references auth.users
+store_id uuid references stores
+title
+description
+category
+price
+discounted_price
+quantity
+low_stock_threshold
+sku
+status active/inactive
+image_url
+gallery_image
+shipping jsonb
+seo jsonb
+limit_single_purchase
+created_at
+updated_at
+
+orders:
+
+id uuid primary key
+owner_id uuid references auth.users
+store_id uuid references stores
+customer_id
+customer_email
+products jsonb
+product_id
+product_title
+price
+subtotal_amount
+discount_amount
+final_amount
+coupon_code
+total_amount
+payment_method
+payment_status
+fulfillment_status
+order_status
+customer_name
+phone
+address
+shipping_address
+status
+created_at
+updated_at
+
+order_timeline:
+
+id uuid primary key
+order_id uuid references orders
+status
+message
+created_at
+
+customers:
+
+id uuid primary key
+store_id uuid references stores
+name
+email
+phone
+total_orders
+total_spent
+created_at
+
+coupons:
+
+id uuid primary key
+store_id uuid references stores
+code
+type percentage/fixed
+value
+min_order_value
+max_discount
+usage_limit
+used_count
+expires_at
+is_active
+created_at
+
+themes:
+
+id uuid primary key
+name
+code unique
+preview_image
+created_at
+
+store_themes:
+
+id uuid primary key
+store_id uuid references stores
+theme_id uuid references themes
+config jsonb
+is_active
+created_at
+
+store_pages:
+
+id uuid primary key
+store_id uuid references stores
+name
+slug
+layout jsonb
+created_at
+
+store_apps:
+
+id uuid primary key
+store_id uuid references stores
+app_id
+enabled
+created_at
+
+
+SUPABASE RLS NOTES
+
+The schema enables RLS for:
+
+profiles
+stores
+products
+orders
+
+Policies include:
+
+- Users can view/update own profile
+- Users can CRUD own stores
+- Public can view stores
+- Users can CRUD own products
+- Public can view active products
+- Users can view/update own orders
+- Public can create orders
+
+However, the Express backend uses the Supabase service role key, so it bypasses RLS. Backend routes must enforce security manually if this becomes production-grade.
+
+
+LOCAL DEVELOPMENT COMMANDS
+
+Install frontend:
+
+cd "/Users/sahilansari/My Disk/Project X/project-x"
+npm install
+
+Run frontend:
+
+cd "/Users/sahilansari/My Disk/Project X/project-x"
+npm run dev
+
+Build frontend:
+
+cd "/Users/sahilansari/My Disk/Project X/project-x"
+npm run build
+
+Lint frontend:
+
+cd "/Users/sahilansari/My Disk/Project X/project-x"
+npm run lint
+
+Install backend:
+
+cd "/Users/sahilansari/My Disk/Project X/server"
+npm install
+
+Run backend:
+
+cd "/Users/sahilansari/My Disk/Project X/server"
+npm run dev
+
+Backend default port:
+
+5001
+
+Frontend default Vite dev URL:
+
+http://localhost:5173
+
+
+IMPORTANT IMPLEMENTATION DETAILS
+
+Storefront URL behavior:
+
+The app supports public storefronts in two ways:
+
+/store/:storeName
+
+and subdomain-style hostnames ending in:
+
+.projectx.com
+
+The root route / checks whether the current hostname is a store subdomain. If yes, it renders the storefront. Otherwise it redirects to /login.
+
+New order notifications:
+
+AppContext polls orders every 15 seconds for the selected store. If a newer order appears, it dispatches:
+
+projectx:new-order
+
+App.jsx listens for this event, shows a toast, and plays a short sound.
+
+Low stock alerts:
+
+Dashboard.jsx polls products every 15 seconds and shows a toast when:
+
+product.quantity &lt;= product.lowStockThreshold
+
+SEO Helper app:
+
+The backend has one app:
+
+seo-helper
+
+When installed/enabled for a store:
+
+- Product form shows/uses SEO title, description, slug
+- Public storefront can use SEO product URLs
+- Product detail route can load by SEO slug
+
+Product images:
+
+Product images are currently read as base64/data URLs in the frontend and stored into image_url as text. There is no separate Supabase Storage upload flow shown in the inspected code.
+
+Theme rendering:
+
+If store page layout exists and has sections, render PageRenderer.
+Otherwise render ThemeRenderer.
+
+Theme codes:
+
+minimal
+modern
+kalles
+
+Coupons during checkout:
+
+Checkout calls:
+
+validateCoupon(code, storeId, orderAmount)
+
+Then order creation also validates the coupon again on the backend.
+
+Payment:
+
+cod -&gt; pending
+online -&gt; paid
+
+There is no real payment gateway integration yet.
+
+Email notification:
+
+Backend uses Nodemailer.
+If SMTP env exists, it sends real email. Otherwise it uses JSON transport.
+
+New order notification recipient:
+
+store.owner_email
+or ORDER_NOTIFICATION_EMAIL
+or SMTP_USER
+
+
+KNOWN RISKS / TECHNICAL DEBT
+
+1. Backend routes are not protected by user auth middleware.
+2. Backend uses Supabase service role and trusts storeId from request body/query.
+3. Frontend stores current user/session in localStorage.
+4. No bearer token is sent from frontend API calls to backend.
+5. Product images are stored as text/base64 rather than uploaded to Supabase Storage.
+6. Signup only creates Supabase user; it does not automatically create a first store.
+7. Public checkout can create orders, decrement stock, upsert customers, and send notifications.
+8. No tests are currently configured.
+9. server/package.json has test set to "Error: no test specified".
+
+
+WHAT TO DO WHEN MODIFYING THIS PROJECT
+
+When making frontend changes:
+
+- Check routes in src/App.jsx.
+- Use src/utils/api.js for backend calls.
+- Use useAppContext() for user/store/app state.
+- Use useToast() for notifications.
+- Preserve current SCSS styling structure unless asked to redesign.
+- Store-specific features should use currentStore.id.
+- Do not hardcode real Supabase keys.
+
+When making backend changes:
+
+- Main file is server/index.js.
+- Use existing mapper functions like toProduct, toStore, toOrder, toCoupon.
+- Always require storeId for store-scoped data.
+- Add manual authorization if adding production-sensitive features.
+- Preserve Supabase column naming conventions: database uses snake_case, frontend uses camelCase.
+
+When making database changes:
+
+- Put schema changes in supabase/migrations.
+- Keep supabase/schema.sql consistent with migrations if this project expects a full schema file.
+- Use gen_random_uuid() IDs.
+- Add indexes for store-scoped lookups.
+- Be careful with RLS policies.
+
+
+MAIN FILES TO READ FIRST
+
+project-x/src/App.jsx
+project-x/src/main.jsx
+project-x/src/context/AppContext.jsx
+project-x/src/context/StoreContext.jsx
+project-x/src/utils/api.js
+project-x/src/utils/supabase.js
+project-x/src/utils/auth.js
+server/index.js
+supabase/schema.sql
+
+For specific features:
+
+Auth:
+project-x/src/pages/Login.jsx
+project-x/src/pages/Signup.jsx
+project-x/src/components/ProtectedRoute.jsx
+
+Store onboarding:
+project-x/src/pages/NewStoreOnboarding.jsx
+project-x/src/pages/Dashboard.jsx
+
+Products:
+project-x/src/pages/Products.jsx
+project-x/src/pages/AddProduct.jsx
+
+Public storefront:
+project-x/src/pages/store/StoreFront.jsx
+project-x/src/pages/store/ProductDetail.jsx
+project-x/src/components/themes/ThemeRenderer.jsx
+
+Orders:
+project-x/src/pages/dashboard/Orders.jsx
+project-x/src/pages/dashboard/OrderDetails.jsx
+project-x/src/components/OrderTimeline.jsx
+
+Themes:
+project-x/src/pages/Themes.jsx
+project-x/src/utils/themeConfig.js
+project-x/src/components/themes/
+
+Page builder:
+project-x/src/pages/VisualEditor.jsx
+project-x/src/components/page-builder/PageRenderer.jsx
+project-x/src/components/page-builder/WidgetRenderer.jsx
+
+Backend:
+server/index.js
+server/supabaseAdmin.js
+
+Database:
+supabase/schema.sql
+supabase/migrations/
+
+
+PROJECT SUMMARY
+
+Project X is a React + Express + Supabase ecommerce SaaS platform where authenticated users can create and manage multiple stores, add products, configure themes, install apps like SEO Helper, manage coupons/customers/orders, and publish a public storefront. The frontend uses React Router, context-based state, Supabase auth, and a central API wrapper. The backend is an Express server using a Supabase service role key to read/write Postgres tables for stores, products, orders, customers, coupons, themes, pages, and apps. Public customers can browse stores/products and place orders, while store owners use the protected admin dashboard to manage their business.</code></pre>
+    </main>
+  </body>
+</html>

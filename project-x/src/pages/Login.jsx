@@ -15,6 +15,7 @@ function Login() {
   const redirectTo = location.state?.from ?? '/dashboard'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -66,18 +67,22 @@ function Login() {
   return (
     <div className="auth-form-shell">
       <div className="auth-form-shell__header">
-        <h2>Login</h2>
+        <h2>Sign In</h2>
         <p>
-          Welcome Back! Please enter your credentials to login you account.
+          Need a Project X account?{' '}
+          <Link className="auth-form__switch-link" to="/signup">
+            Create an account
+          </Link>
         </p>
       </div>
 
       <form className="auth-form" onSubmit={handleLogin}>
         <div className="auth-form__field">
-          <label htmlFor="login-email">Email</label>
+          <label htmlFor="login-email">Email Address</label>
           <input
             id="login-email"
             type="email"
+            placeholder="Enter your email address"
             value={email}
             onChange={(event) => {
               setEmail(event.target.value)
@@ -89,14 +94,12 @@ function Login() {
         <div className="auth-form__field">
           <div className="auth-form__label-row">
             <label htmlFor="login-password">Password</label>
-            <button className="auth-form__text-button" type="button">
-              Forgot?
-            </button>
           </div>
           <div className="auth-form__password">
             <input
               id="login-password"
               type={showPassword ? 'text' : 'password'}
+              placeholder="Enter your password"
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value)
@@ -114,22 +117,29 @@ function Login() {
           </div>
         </div>
 
+        <div className="auth-form__utility-row">
+          <label className="auth-form__checkbox">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+            />
+            <span>Remember me</span>
+          </label>
+
+          <button className="auth-form__text-button" type="button">
+            Forgot password?
+          </button>
+        </div>
+
         <Button className="auth-form__submit" fullWidth type="submit">
-          {isSubmitting ? 'Signing in...' : 'Login'}
+          {isSubmitting ? 'Signing in...' : 'Sign In'}
         </Button>
         {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
       </form>
 
-      <p className="auth-form__switch">
-        New to ProjectX?{' '}
-        <Link className="auth-form__switch-link" to="/signup">
-          Get Started
-        </Link>
-      </p>
-
-      <p className="auth-form__terms">
-        By continuing, you agree to our <a href="/">Terms of Use</a> and{' '}
-        <a href="/">Privacy Policy.</a>
+      <p className="auth-form__copyright">
+        Copyright © 2026 Project X. All rights reserved.
       </p>
     </div>
   )
