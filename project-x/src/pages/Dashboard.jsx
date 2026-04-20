@@ -292,6 +292,14 @@ function Dashboard() {
   async function handleSubmit(event) {
     event.preventDefault()
 
+    const name = storeName.trim()
+    const slug = getStoreUrlSlug(storeUrl).trim().toLowerCase()
+
+    if (!name || !slug) {
+      showToast('Please fill all required fields', 'error')
+      return
+    }
+
     if (!isFormValid || !currentUser?.id || (isEditingExistingStore && !hasStoreFormChanges)) {
       return
     }
@@ -299,18 +307,24 @@ function Dashboard() {
     try {
       setStoreUrlError('')
       const storePayload = {
-        name: storeName.trim(),
-        url: `${getStoreUrlSlug(storeUrl)}.projectx.com`,
+        name,
+        slug,
+        subdomain: slug,
+        url: `${slug}.projectx.com`,
         ownerEmail: currentUser.email ?? '',
         onboardingStep: 2,
       }
-
-      const nextStore = isEditingExistingStore
-        ? await updateStore(currentStore.id, storePayload)
-        : await createStore({
-            userId: currentUser.id,
-            ...storePayload,
-          })
+      let nextStore
+      if (isEditingExistingStore) {
+        nextStore = await updateStore(currentStore.id, storePayload)
+      } else {
+        const createPayload = {
+          userId: currentUser.id,
+          ...storePayload,
+        }
+        console.log('Creating store with:', createPayload)
+        nextStore = await createStore(createPayload)
+      }
 
       setCurrentStore(nextStore)
       setIsStoreCreated(true)

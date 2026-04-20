@@ -105,10 +105,6 @@ function normalizeStoreUrl(value) {
   return slug ? `${slug}.projectx.com` : ''
 }
 
-function getDraftSlug() {
-  return `draft-${Date.now()}`
-}
-
 function getThemeConfig(themeConfig) {
   return {
     ...defaultThemeConfig,
@@ -1004,27 +1000,32 @@ app.post('/stores', async (req, res) => {
     const ownerId = req.body.owner_id ?? req.body.userId
     if (!ownerId) return res.status(400).json({ message: 'userId is required' })
 
-    const slug = normalizeStoreSlug(req.body.slug ?? req.body.url ?? req.body.name) || getDraftSlug()
+    const name = String(req.body.name ?? '').trim()
+    if (!name) return res.status(400).json({ message: 'Store name is required' })
+
+    const slug = normalizeStoreSlug(req.body.slug ?? req.body.url ?? name)
+    if (!slug) return res.status(400).json({ message: 'Store Temporary URL is required' })
+
     const subdomain = normalizeStoreSubdomain(req.body.subdomain ?? slug)
+    const payload = {
+      owner_id: ownerId,
+      name,
+      slug,
+      subdomain,
+      address1: req.body.address1 ?? '',
+      address2: req.body.address2 ?? '',
+      logo_url: req.body.logoUrl ?? '',
+      owner_email: req.body.ownerEmail ?? '',
+      theme_id: req.body.themeId ?? 'minimal',
+      theme_config: getThemeConfig(req.body.themeConfig),
+      onboarding_step: Number(req.body.onboardingStep) || 1,
+      is_onboarding_completed: Boolean(req.body.isOnboardingCompleted),
+    }
+    console.log('Creating store with:', payload)
 
     const { data, error } = await supabase
       .from('stores')
-      .insert([
-        {
-          owner_id: ownerId,
-          name: req.body.name ?? '',
-          slug,
-          subdomain,
-          address1: req.body.address1 ?? '',
-          address2: req.body.address2 ?? '',
-          logo_url: req.body.logoUrl ?? '',
-          owner_email: req.body.ownerEmail ?? '',
-          theme_id: req.body.themeId ?? 'minimal',
-          theme_config: getThemeConfig(req.body.themeConfig),
-          onboarding_step: Number(req.body.onboardingStep) || 1,
-          is_onboarding_completed: Boolean(req.body.isOnboardingCompleted),
-        },
-      ])
+      .insert([payload])
       .select()
       .single()
 
@@ -1043,7 +1044,11 @@ app.put('/stores/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
   const update = {}
-  if (req.body.name !== undefined) update.name = req.body.name
+  if (req.body.name !== undefined) {
+    const name = String(req.body.name ?? '').trim()
+    if (!name) return res.status(400).json({ message: 'Store name is required' })
+    update.name = name
+  }
   if (req.body.url !== undefined || req.body.slug !== undefined) {
     const slug = normalizeStoreSlug(req.body.slug ?? req.body.url)
     if (slug) {

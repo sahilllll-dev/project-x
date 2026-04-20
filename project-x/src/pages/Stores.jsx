@@ -4,7 +4,7 @@ import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { createStore, deleteStore, getStoresByUserId } from '../utils/api.js'
+import { deleteStore, getStoresByUserId } from '../utils/api.js'
 import { getStoreDestination } from '../utils/onboarding.js'
 import { getStoreAvatarStyle, getStoreInitial } from '../utils/storeAvatar.js'
 
@@ -14,7 +14,6 @@ function Stores() {
   const { showToast } = useToast()
   const [stores, setStores] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isCreating, setIsCreating] = useState(false)
   const [deletingStoreId, setDeletingStoreId] = useState(null)
 
   function handleSelectStore(store) {
@@ -42,32 +41,9 @@ function Stores() {
     fetchStores()
   }, [currentUser?.id])
 
-  async function handleAddNewStore() {
-    if (!currentUser?.id) {
-      return
-    }
-
-    setIsCreating(true)
-
-    try {
-      const nextStore = await createStore({
-        userId: currentUser.id,
-        ownerEmail: currentUser.email ?? '',
-        name: '',
-        url: '',
-        onboardingStep: 1,
-        isOnboardingCompleted: false,
-      })
-
-      setStores((currentStores) => [...currentStores, nextStore])
-      setCurrentStore(nextStore)
-      navigate('/onboarding/step-1')
-    } catch (error) {
-      console.error(error)
-      showToast('Something went wrong, please try again', 'error')
-    } finally {
-      setIsCreating(false)
-    }
+  function handleAddNewStore() {
+    setCurrentStore(null)
+    navigate('/onboarding/step-1')
   }
 
   async function handleDeleteStore(storeId) {
@@ -97,8 +73,8 @@ function Stores() {
         <div>
           <p>Switch between your stores or create a new one.</p>
         </div>
-        <Button disabled={isCreating} onClick={handleAddNewStore}>
-          {isCreating ? 'Creating...' : '+ Add New Store'}
+        <Button onClick={handleAddNewStore}>
+          + Add New Store
         </Button>
       </div>
 
