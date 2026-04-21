@@ -157,6 +157,15 @@ function NewStoreOnboarding() {
     <main className="onboarding-page">
       <SurfaceCard className="onboarding-card">
         <div className="onboarding-card__header">
+          {isAddingStore ? (
+            <button
+              className="onboarding-card__back"
+              type="button"
+              onClick={() => navigate('/stores')}
+            >
+              Back to stores
+            </button>
+          ) : null}
           <span className="onboarding-card__eyebrow">Project X</span>
           <h1>{isAddingStore ? 'Create another store' : 'Create your store'}</h1>
           <p>

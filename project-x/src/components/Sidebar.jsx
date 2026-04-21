@@ -87,7 +87,7 @@ function Sidebar({ isLoading = false }) {
   const navigate = useNavigate()
   const location = useLocation()
   const dropdownRef = useRef(null)
-  const { currentUser, storeApps, clearAppContext } = useAppContext()
+  const { currentUser, defaultStoreId, storeApps, clearAppContext } = useAppContext()
   const { currentStore, setCurrentStore, stores, setStores } = useStore()
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false)
   const [openMenuKey, setOpenMenuKey] = useState('')
@@ -191,6 +191,10 @@ function Sidebar({ isLoading = false }) {
     navigate(getStoreDestination(store))
   }
 
+  function isDefaultStore(store) {
+    return Boolean(store?.isDefault || store?.id === defaultStoreId)
+  }
+
   return (
     <aside className="app-sidebar">
       {isLoading ? <SidebarSkeleton /> : null}
@@ -232,28 +236,37 @@ function Sidebar({ isLoading = false }) {
                       {getStoreInitial(currentStore)}
                     </span>
                     <span>{currentStore.name}</span>
-                    <span className="sidebar-store-option__check">✓</span>
+                    {isDefaultStore(currentStore) ? (
+                      <span className="sidebar-store-option__badge">default</span>
+                    ) : null}
                   </button>
                 ) : null}
 
                 {stores
                   .filter((store) => store.id !== currentStore?.id)
-                  .map((store) => (
-                    <button
-                      className="sidebar-store-option"
-                      type="button"
-                      key={store.id}
-                      onClick={() => handleStoreSelect(store)}
-                    >
-                      <span
-                        className="sidebar-store-option__avatar"
-                        style={getStoreAvatarStyle(store)}
+                  .map((store) => {
+                    const isDefault = isDefaultStore(store)
+
+                    return (
+                      <button
+                        className="sidebar-store-option"
+                        type="button"
+                        key={store.id}
+                        onClick={() => handleStoreSelect(store)}
                       >
-                        {getStoreInitial(store)}
-                      </span>
-                      <span>{store.name}</span>
-                    </button>
-                  ))}
+                        <span
+                          className="sidebar-store-option__avatar"
+                          style={getStoreAvatarStyle(store)}
+                        >
+                          {getStoreInitial(store)}
+                        </span>
+                        <span>{store.name}</span>
+                        {isDefault ? (
+                          <span className="sidebar-store-option__badge">default</span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
 
                 {!currentStore && stores.length === 0 ? (
                   <div className="sidebar-store-empty">

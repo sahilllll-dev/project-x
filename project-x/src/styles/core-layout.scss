@@ -2872,7 +2872,34 @@
 
 .onboarding-card__header {
   margin-bottom: 28px;
+  position: relative;
   text-align: center;
+}
+
+.onboarding-card__back {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #4b5563;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.92rem;
+  font-weight: 700;
+  left: 0;
+  padding: 0;
+  position: absolute;
+  top: 2px;
+}
+
+.onboarding-card__back::before {
+  content: '‹';
+  font-size: 1.35rem;
+  line-height: 1;
+  margin-right: 6px;
+}
+
+.onboarding-card__back:hover {
+  color: #111827;
 }
 
 .onboarding-card__eyebrow {

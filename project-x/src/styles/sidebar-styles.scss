@@ -228,9 +228,17 @@
   font-weight: 700;
 }
 
-.sidebar-store-option__check {
-  color: #111827;
-  font-size: 1.1rem;
+.sidebar-store-option__badge {
+  justify-self: end;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e8f7ef;
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: lowercase;
+  white-space: nowrap;
 }
 
 .sidebar-store-empty {

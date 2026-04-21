@@ -6,6 +6,7 @@ const CURRENT_USER_STORAGE_KEY = 'currentUser'
 const STORE_APPS_STORAGE_KEY = 'storeApps'
 const STORE_NOTIFICATION_STORAGE_KEY = 'storeNotifications'
 const DEFAULT_STORE_STORAGE_KEY = 'defaultStoreByUser'
+const SELECTED_STORE_STORAGE_KEY = 'selectedStoreByUser'
 const NEW_ORDER_EVENT = 'projectx:new-order'
 
 export const AppContext = createContext({
@@ -87,8 +88,39 @@ function writeDefaultStoreId(userId, storeId) {
   writeJson(DEFAULT_STORE_STORAGE_KEY, defaultStoreByUser)
 }
 
+function readSelectedStoreId(userId) {
+  if (!userId) {
+    return null
+  }
+
+  const selectedStoreByUser = readJson(SELECTED_STORE_STORAGE_KEY, {})
+  return selectedStoreByUser[userId] ?? null
+}
+
+function writeSelectedStoreId(userId, storeId) {
+  if (!userId) {
+    return
+  }
+
+  const selectedStoreByUser = readJson(SELECTED_STORE_STORAGE_KEY, {})
+
+  if (!storeId) {
+    delete selectedStoreByUser[userId]
+  } else {
+    selectedStoreByUser[userId] = storeId
+  }
+
+  writeJson(SELECTED_STORE_STORAGE_KEY, selectedStoreByUser)
+}
+
 export function AppProvider({ children }) {
-  const { currentStore, setCurrentStore, storeSwitchVersion, stores, setStores } = useStore()
+  const {
+    currentStore,
+    setCurrentStore: setStoreContextCurrentStore,
+    storeSwitchVersion,
+    stores,
+    setStores,
+  } = useStore()
   const [currentUser, setCurrentUserState] = useState(() => readJson(CURRENT_USER_STORAGE_KEY, null))
   const [notifications, setNotifications] = useState([])
   const [storeApps, setStoreAppsState] = useState(() => readJson(STORE_APPS_STORAGE_KEY, []))
@@ -113,6 +145,14 @@ export function AppProvider({ children }) {
   }, [notificationMeta])
 
   useEffect(() => {
+    if (!currentUser?.id || !currentStore?.id) {
+      return
+    }
+
+    writeSelectedStoreId(currentUser.id, currentStore.id)
+  }, [currentStore?.id, currentUser?.id])
+
+  useEffect(() => {
     let isCancelled = false
 
     async function hydrateStore() {
@@ -122,7 +162,7 @@ export function AppProvider({ children }) {
 
       if (!currentUser?.id) {
         setStores([])
-        setCurrentStore(null)
+        setStoreContextCurrentStore(null)
         setDefaultStoreId(null)
         setIsStoreReady(true)
         return
@@ -140,19 +180,22 @@ export function AppProvider({ children }) {
         setStores(nextStores)
 
         if (nextStores.length === 0) {
-          setCurrentStore(null)
+          setStoreContextCurrentStore(null)
           setDefaultStoreId(null)
           return
         }
 
         const storedDefaultStoreId = readDefaultStoreId(currentUser.id)
+        const storedSelectedStoreId = readSelectedStoreId(currentUser.id)
         const defaultStore =
           nextStores.find((store) => store.isDefault) ??
           nextStores.find((store) => store.id === storedDefaultStoreId)
-        const nextStore = defaultStore ?? nextStores[0]
+        const selectedStore = nextStores.find((store) => store.id === storedSelectedStoreId)
+        const nextStore = selectedStore ?? defaultStore ?? nextStores[0]
 
-        setCurrentStore(nextStore)
-        setDefaultStoreId(nextStore.id)
+        setStoreContextCurrentStore(nextStore)
+        setDefaultStoreId(defaultStore?.id ?? nextStore.id)
+        writeSelectedStoreId(currentUser.id, nextStore.id)
 
         if (!storedDefaultStoreId || !defaultStore) {
           writeDefaultStoreId(currentUser.id, nextStore.id)
@@ -172,7 +215,7 @@ export function AppProvider({ children }) {
     return () => {
       isCancelled = true
     }
-  }, [currentUser?.id, isAppReady, setCurrentStore, setStores])
+  }, [currentUser?.id, isAppReady, setStoreContextCurrentStore, setStores])
 
   useEffect(() => {
     if (!currentStore?.id) {
@@ -255,6 +298,15 @@ export function AppProvider({ children }) {
     setCurrentUserState(user ?? null)
   }
 
+  const setCurrentStore = useCallback(
+    (store) => {
+      const nextStore = store ?? null
+      setStoreContextCurrentStore(nextStore)
+      writeSelectedStoreId(currentUser?.id, nextStore?.id ?? null)
+    },
+    [currentUser?.id, setStoreContextCurrentStore],
+  )
+
   function setStoreApps(nextStoreApps) {
     setStoreAppsState(nextStoreApps ?? [])
   }
@@ -310,8 +362,9 @@ export function AppProvider({ children }) {
       stores.find((store) => store.id === storedDefaultStoreId) ??
       stores[0] ??
       null
-    setCurrentStore(nextStore)
+    setStoreContextCurrentStore(nextStore)
     setDefaultStoreId(nextStore?.id ?? null)
+    writeSelectedStoreId(nextUser.id, nextStore?.id ?? null)
     if (nextStore && (!storedDefaultStoreId || storedDefaultStoreId !== nextStore.id)) {
       writeDefaultStoreId(nextUser.id, nextStore.id)
     }
@@ -329,12 +382,14 @@ export function AppProvider({ children }) {
 
   function clearAppContext() {
     setCurrentUserState(null)
-    setCurrentStore(null)
+    const previousUserId = currentUser?.id
+    setStoreContextCurrentStore(null)
     setStores([])
     setNotifications([])
     setStoreAppsState([])
     setDefaultStoreId(null)
     setIsStoreReady(true)
+    writeSelectedStoreId(previousUserId, null)
     writeJson(CURRENT_USER_STORAGE_KEY, null)
     writeJson(STORE_APPS_STORAGE_KEY, [])
   }

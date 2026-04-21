@@ -69,7 +69,6 @@ function Stores() {
   }, [fetchStores])
 
   function handleAddNewStore() {
-    setCurrentStore(null)
     navigate('/onboarding/new')
   }
 
