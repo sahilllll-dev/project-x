@@ -7,7 +7,6 @@ import { logoutUser } from '../utils/auth.js'
 
 const routeTitles = [
   { match: /^\/dashboard$/, title: 'Dashboard' },
-  { match: /^\/onboarding(\/step-\d+)?$/, title: 'Dashboard' },
   { match: /^\/stores$/, title: 'All Stores' },
   { match: /^\/products$/, title: 'Products' },
   { match: /^\/categories$/, title: 'Categories' },

@@ -1743,6 +1743,8 @@ app.put('/stores/:id/theme-config', async (req, res) => {
   }
 })
 
+app.get('/stores/check-slug', checkStoreSlugAvailability)
+
 app.get('/stores/:userId', async (req, res) => {
   if (!requireSupabase(res)) return
   const { data, error } = await supabase.from('stores').select('*').eq('owner_id', req.params.userId).order('created_at', { ascending: false })
@@ -1883,7 +1885,7 @@ app.post('/api/page/save', async (req, res) => {
 })
 
 console.log('Route /store/check-slug loaded')
-app.get('/store/check-slug', async (req, res) => {
+async function checkStoreSlugAvailability(req, res) {
   if (!requireSupabase(res)) return
 
   try {
@@ -1905,7 +1907,9 @@ app.get('/store/check-slug', async (req, res) => {
   } catch (error) {
     sendServerError(res, error)
   }
-})
+}
+
+app.get('/store/check-slug', checkStoreSlugAvailability)
 
 app.get('/apps', (req, res) => {
   res.json(apps)

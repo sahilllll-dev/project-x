@@ -1,57 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Header from '../components/Header.jsx'
 import Sidebar from '../components/Sidebar.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
-import { getStoresByUserId } from '../utils/api.js'
 
 function MainLayout() {
   const location = useLocation()
-  const navigate = useNavigate()
-  const { currentUser, currentStore, isAppReady, isStoreReady, stores } = useAppContext()
+  const { isAppReady, isStoreReady } = useAppContext()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [storeCount, setStoreCount] = useState(null)
-  const isNewStoreFlow = location.pathname === '/onboarding/new'
-  const isStoreOnboardingRoute = /^\/onboarding\/(?!new(?:\/|$))[^/]+$/.test(location.pathname)
-  const isStoresRoute = location.pathname.startsWith('/stores')
-  const resolvedStoreCount = stores.length > 0 ? stores.length : storeCount
-  const isNewUser = resolvedStoreCount === 0
-  const showHeader = !isNewStoreFlow || resolvedStoreCount > 0
-  const showSidebar = showHeader
   const isSidebarLoading = !isStoreReady
   const isMainContentLoaded = isAppReady && isStoreReady
-
-  useEffect(() => {
-    if (
-      isAppReady &&
-      isStoreReady &&
-      !currentStore &&
-      stores.length === 0 &&
-      !isNewStoreFlow &&
-      !isStoreOnboardingRoute &&
-      !isStoresRoute
-    ) {
-      navigate('/onboarding/new', { replace: true })
-    }
-  }, [currentStore, isAppReady, isNewStoreFlow, isStoreOnboardingRoute, isStoresRoute, isStoreReady, navigate, stores.length])
-
-  useEffect(() => {
-    if (!currentUser?.id || !isNewStoreFlow || stores.length > 0) {
-      return
-    }
-
-    async function loadStoreCount() {
-      try {
-        const stores = await getStoresByUserId(currentUser.id)
-        setStoreCount(stores.length)
-      } catch (error) {
-        console.error(error)
-        setStoreCount(null)
-      }
-    }
-
-    loadStoreCount()
-  }, [currentUser?.id, isNewStoreFlow, stores.length])
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -68,9 +26,6 @@ function MainLayout() {
       className={[
         'layout',
         isMobileSidebarOpen ? 'layout--sidebar-open' : '',
-        showHeader ? '' : 'layout--no-header',
-        showSidebar ? '' : 'layout--no-sidebar',
-        isNewUser && isNewStoreFlow ? 'layout--first-onboarding' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -81,11 +36,9 @@ function MainLayout() {
         aria-label="Close sidebar"
         onClick={() => setIsMobileSidebarOpen(false)}
       />
-      {showSidebar ? <Sidebar isLoading={isSidebarLoading} /> : null}
+      <Sidebar isLoading={isSidebarLoading} />
       <div className="main">
-        {showHeader ? (
-          <Header onMenuToggle={() => setIsMobileSidebarOpen((isOpen) => !isOpen)} />
-        ) : null}
+        <Header onMenuToggle={() => setIsMobileSidebarOpen((isOpen) => !isOpen)} />
         <div className={`content main-content${isMainContentLoaded ? ' loaded' : ''}`}>
           <Outlet />
         </div>

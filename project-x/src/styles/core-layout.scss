@@ -2850,6 +2850,121 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.onboarding-page {
+  align-items: center;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(20, 184, 166, 0.18), transparent 28%),
+    radial-gradient(circle at 85% 10%, rgba(251, 146, 60, 0.16), transparent 24%),
+    linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: clamp(20px, 5vw, 72px);
+}
+
+.onboarding-card {
+  border-radius: 28px;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.14);
+  max-width: 520px;
+  padding: clamp(24px, 5vw, 42px);
+  width: 100%;
+}
+
+.onboarding-card__header {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.onboarding-card__eyebrow {
+  background: #111827;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin-bottom: 18px;
+  padding: 7px 12px;
+  text-transform: uppercase;
+}
+
+.onboarding-card__header h1 {
+  color: #111827;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: 0;
+}
+
+.onboarding-card__header p {
+  color: #6b7280;
+  font-size: 1rem;
+  line-height: 1.65;
+  margin: 14px auto 0;
+  max-width: 420px;
+}
+
+.onboarding-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.onboarding-slug-field {
+  align-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  display: flex;
+  overflow: hidden;
+}
+
+.onboarding-slug-field:focus-within {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.onboarding-slug-field input {
+  border: 0;
+  border-radius: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.onboarding-slug-field input:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+.onboarding-slug-field span {
+  background: #f9fafb;
+  border-left: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-size: 0.92rem;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.onboarding-slug-status {
+  color: #6b7280;
+  font-size: 0.86rem;
+  min-height: 22px;
+  padding-top: 6px;
+}
+
+.onboarding-slug-status--success {
+  color: #047857;
+  font-weight: 700;
+}
+
+.onboarding-slug-status--error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.onboarding-card__button {
+  margin-top: 6px;
+}
+
 @media (max-width: 1024px) {
   .editor {
     grid-template-columns: 1fr;

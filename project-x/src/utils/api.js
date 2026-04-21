@@ -289,7 +289,7 @@ export function checkStoreSlug(slug, excludeStoreId) {
     params.set('excludeStoreId', String(excludeStoreId))
   }
 
-  return request(`/store/check-slug?${params.toString()}`)
+  return request(`/stores/check-slug?${params.toString()}`)
 }
 
 export function getStoreByUrl(subdomain) {

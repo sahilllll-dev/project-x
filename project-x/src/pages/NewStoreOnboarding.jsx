@@ -1,193 +1,113 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { checkStoreSlug, createStore, getStoresByUserId } from '../utils/api.js'
+import { checkStoreSlug, createStore } from '../utils/api.js'
 
-const initialFormData = {
-  name: '',
-  address1: '',
-  address2: '',
-  slug: '',
-}
-
-function normalizeSlug(value) {
+function slugify(value) {
   return String(value || '')
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '')
-    .replace(/[^a-z0-9-]/g, '')
-}
-
-function OnboardingLayout({ children, showBackButton, title }) {
-  const navigate = useNavigate()
-  const steps = ['Store Settings', 'Add Products', 'Sell Online']
-
-  return (
-    <div className="dashboard">
-      <div className="dashboard-intro">
-        {showBackButton ? (
-          <button className="product-editor__back" type="button" onClick={() => navigate('/stores')}>
-            Back to stores
-          </button>
-        ) : null}
-        <h2>{title}</h2>
-        <p>Add the basic details for your new storefront.</p>
-      </div>
-
-      <section className="setup-guide">
-        <div className="setup-guide__heading">
-          <h3>Setup guide</h3>
-          <span className="setup-guide__status">0/4 Completed</span>
-        </div>
-
-        <div className="setup-guide__card">
-          <div className="setup-guide__steps">
-            <ul className="setup-list">
-              {steps.map((step, index) => (
-                <li
-                  className={`setup-list__item${index === 0 ? ' is-active' : ''}`}
-                  key={step}
-                >
-                  <span className="setup-list__icon" aria-hidden="true">
-                    {index === 0 ? '✓' : ''}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <section className="right-panel">
-            {children}
-          </section>
-        </div>
-      </section>
-    </div>
-  )
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function NewStoreOnboarding() {
+  const location = useLocation()
   const navigate = useNavigate()
   const { currentUser, setCurrentStore, setStores, stores } = useAppContext()
   const { showToast } = useToast()
-  const [formData, setFormData] = useState(initialFormData)
+  const [storeName, setStoreName] = useState('')
+  const [slug, setSlug] = useState('')
   const [isSlugEdited, setIsSlugEdited] = useState(false)
   const [isSlugAvailable, setIsSlugAvailable] = useState(null)
   const [slugError, setSlugError] = useState('')
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [storeCount, setStoreCount] = useState(null)
-  const resolvedStoreCount = stores.length > 0 ? stores.length : storeCount
-  const isNewUser = resolvedStoreCount === 0
-  const isValid = Boolean(formData.name.trim() && formData.slug.trim() && isSlugAvailable === true)
+  const isAddingStore = location.pathname === '/onboarding/new' && stores.length > 0
+  const canContinue =
+    Boolean(storeName.trim() && slug.trim()) && isSlugAvailable === true && !isSubmitting
 
   useEffect(() => {
-    setCurrentStore(null)
-  }, [setCurrentStore])
-
-  useEffect(() => {
-    if (!currentUser?.id || stores.length > 0) {
-      return
-    }
-
-    async function loadStoreCount() {
-      try {
-        const stores = await getStoresByUserId(currentUser.id)
-        setStoreCount(stores.length)
-      } catch (error) {
-        console.error(error)
-        setStoreCount(null)
-      }
-    }
-
-    loadStoreCount()
-  }, [currentUser?.id, stores.length])
-
-  useEffect(() => {
-    const slug = normalizeSlug(formData.slug)
-
-    if (!slug) {
+    if (!slug.trim()) {
+      setIsSlugAvailable(null)
+      setSlugError('')
+      setIsCheckingSlug(false)
       return undefined
     }
 
+    let isCancelled = false
+
     async function checkAvailability() {
+      setIsCheckingSlug(true)
+
       try {
         const response = await checkStoreSlug(slug)
+
+        if (isCancelled) {
+          return
+        }
+
         setIsSlugAvailable(response.available)
-        setSlugError(response.available ? '' : 'Store Temporary URL already used')
+        setSlugError(response.available ? '' : 'Already taken')
       } catch (error) {
         console.error(error)
-        setIsSlugAvailable(false)
-        setSlugError('Unable to verify URL')
+
+        if (!isCancelled) {
+          setIsSlugAvailable(false)
+          setSlugError('Unable to check slug')
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsCheckingSlug(false)
+        }
       }
     }
 
-    const debounceTimerId = window.setTimeout(checkAvailability, 300)
+    const timerId = window.setTimeout(checkAvailability, 300)
 
     return () => {
-      window.clearTimeout(debounceTimerId)
+      isCancelled = true
+      window.clearTimeout(timerId)
     }
-  }, [formData.slug])
+  }, [slug])
 
-  function handleChange(event) {
-    const { name, value } = event.target
+  function handleStoreNameChange(event) {
+    const nextName = event.target.value
+    setStoreName(nextName)
 
-    if (name === 'name') {
-      const nextSlug = isSlugEdited ? formData.slug : normalizeSlug(value)
-      setFormData((currentFormData) => ({
-        ...currentFormData,
-        name: value,
-        slug: nextSlug,
-      }))
-
-      if (!nextSlug) {
-        setIsSlugAvailable(null)
-        setSlugError('')
-      }
-
-      return
+    if (!isSlugEdited) {
+      setSlug(slugify(nextName))
     }
-
-    if (name === 'slug') {
-      setIsSlugEdited(true)
-      const nextSlug = normalizeSlug(value)
-      setFormData((currentFormData) => ({
-        ...currentFormData,
-        slug: nextSlug,
-      }))
-
-      if (!nextSlug) {
-        setIsSlugAvailable(null)
-        setSlugError('')
-      }
-
-      return
-    }
-
-    setFormData((currentFormData) => ({
-      ...currentFormData,
-      [name]: name === 'slug' ? normalizeSlug(value) : value,
-    }))
   }
 
-  async function handleCreateStore() {
-    const name = formData.name.trim()
-    const slug = normalizeSlug(formData.slug)
+  function handleSlugChange(event) {
+    setIsSlugEdited(true)
+    setSlug(slugify(event.target.value))
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    const name = storeName.trim()
+    const nextSlug = slugify(slug)
 
     if (!name) {
       showToast('Store name is required', 'error')
       return
     }
 
-    if (!slug) {
-      showToast('Store URL is required', 'error')
+    if (!nextSlug) {
+      showToast('Slug is required', 'error')
       return
     }
 
     if (isSlugAvailable !== true) {
-      showToast(slugError || 'Please choose an available Store URL', 'error')
+      showToast(slugError || 'Choose an available slug', 'error')
       return
     }
 
@@ -196,34 +116,37 @@ function NewStoreOnboarding() {
       return
     }
 
-    const payload = {
-      name,
-      slug,
-      subdomain: slug,
-      address1: formData.address1.trim(),
-      address2: formData.address2.trim(),
-      userId: currentUser.id,
-      ownerEmail: currentUser.email ?? '',
-      onboardingStep: 2,
-      isOnboardingCompleted: false,
-    }
-    console.log('Creating store with:', payload)
-
     setIsSubmitting(true)
 
     try {
-      const nextStore = await createStore(payload)
+      const nextStore = await createStore({
+        name,
+        slug: nextSlug,
+        userId: currentUser.id,
+        ownerEmail: currentUser.email ?? '',
+        onboardingStep: 2,
+        isOnboardingCompleted: false,
+      })
+
       setCurrentStore(nextStore)
-      setStores((currentStores) => [...currentStores, nextStore])
+      setStores((currentStores) => {
+        if (currentStores.some((store) => store.id === nextStore.id)) {
+          return currentStores
+        }
+
+        return [...currentStores, nextStore]
+      })
       showToast('Store created successfully', 'success')
-      navigate('/dashboard')
+      navigate('/dashboard', { replace: true })
     } catch (error) {
       console.error(error)
-      const message = error.message || 'Something went wrong'
+      const message = error.message || 'Failed to create store'
+
       if (message === 'Store Temporary URL already used') {
         setIsSlugAvailable(false)
-        setSlugError(message)
+        setSlugError('Already taken')
       }
+
       showToast(message, 'error')
     } finally {
       setIsSubmitting(false)
@@ -231,86 +154,69 @@ function NewStoreOnboarding() {
   }
 
   return (
-    <OnboardingLayout
-      showBackButton={resolvedStoreCount > 0}
-      title={isNewUser ? 'Create Your First Store' : 'Add New Store'}
-    >
-      <SurfaceCard className="form-card">
-        <div className="form-field">
-          <label htmlFor="new-store-name">Store Name*</label>
-          <input
-            id="new-store-name"
-            name="name"
-            type="text"
-            value={formData.name}
-            onChange={handleChange}
-            required
-          />
+    <main className="onboarding-page">
+      <SurfaceCard className="onboarding-card">
+        <div className="onboarding-card__header">
+          <span className="onboarding-card__eyebrow">Project X</span>
+          <h1>{isAddingStore ? 'Create another store' : 'Create your store'}</h1>
+          <p>
+            Add your store name and choose a clean URL. You must create a store before
+            using the admin dashboard.
+          </p>
         </div>
 
-        <div className="form-field">
-          <label htmlFor="new-store-address1">Address</label>
-          <input
-            id="new-store-address1"
-            name="address1"
-            type="text"
-            value={formData.address1}
-            onChange={handleChange}
-          />
-        </div>
+        <form className="onboarding-form" onSubmit={handleSubmit}>
+          <div className="form-field">
+            <label htmlFor="store-name">Store name</label>
+            <input
+              id="store-name"
+              type="text"
+              value={storeName}
+              onChange={handleStoreNameChange}
+              placeholder="My Store Name"
+              autoFocus
+              required
+            />
+          </div>
 
-        <div className="form-field">
-          <label htmlFor="new-store-address2">Address line 2</label>
-          <input
-            id="new-store-address2"
-            name="address2"
-            type="text"
-            value={formData.address2}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="new-store-slug">Store Temporary URL*</label>
-          <div className="url-input-group">
-            <div className="url-display">
+          <div className="form-field">
+            <label htmlFor="store-slug">Slug</label>
+            <div className="onboarding-slug-field">
               <input
-                id="new-store-slug"
-                className="url-display__input"
-                name="slug"
+                id="store-slug"
                 type="text"
-                value={formData.slug}
-                onChange={handleChange}
-                placeholder="store"
+                value={slug}
+                onChange={handleSlugChange}
+                placeholder="my-store-name"
                 required
               />
-              <span className="url-display__suffix">.projectx.com</span>
+              <span>.projectx.com</span>
             </div>
-            {isSlugAvailable === true ? (
-              <span className="status-icon status-icon--success" aria-label="URL available">
-                ✓
-              </span>
-            ) : null}
-            {isSlugAvailable === false ? (
-              <span className="status-icon status-icon--error" aria-label="URL unavailable">
-                ✕
-              </span>
-            ) : null}
-          </div>
-          {slugError ? <p className="error-text">{slugError}</p> : null}
-        </div>
 
-        <Button
-          className="dashboard-create-button"
-          disabled={!isValid || isSubmitting}
-          fullWidth
-          type="button"
-          onClick={handleCreateStore}
-        >
-          {isSubmitting ? 'Creating...' : 'Create Store'}
-        </Button>
+            <div className="onboarding-slug-status" aria-live="polite">
+              {isCheckingSlug ? <span>Checking...</span> : null}
+              {!isCheckingSlug && isSlugAvailable === true ? (
+                <span className="onboarding-slug-status--success">Available</span>
+              ) : null}
+              {!isCheckingSlug && isSlugAvailable === false ? (
+                <span className="onboarding-slug-status--error">
+                  {slugError || 'Already taken'}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <Button
+            className="onboarding-card__button"
+            disabled={!canContinue}
+            fullWidth
+            type="submit"
+          >
+            {isSubmitting ? 'Creating...' : 'Continue'}
+          </Button>
+        </form>
       </SurfaceCard>
-    </OnboardingLayout>
+    </main>
   )
 }
 

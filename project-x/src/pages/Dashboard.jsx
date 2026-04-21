@@ -419,7 +419,7 @@ function Dashboard() {
           <Button onClick={() => navigate('/stores')} variant="outline">
             View Stores
           </Button>
-          <Button onClick={() => navigate('/onboarding/new')}>
+          <Button onClick={() => navigate('/onboarding')}>
             Create New Store
           </Button>
         </SurfaceCard>

@@ -3,9 +3,5 @@ export function getStoreDestination(store) {
     return '/onboarding'
   }
 
-  if (store.isOnboardingCompleted) {
-    return '/dashboard'
-  }
-
-  return `/onboarding/${store.id}`
+  return '/dashboard'
 }

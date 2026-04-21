@@ -132,11 +132,10 @@ function App() {
         <Route path="/product/:slug" element={<ProductDetail />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/onboarding" element={<NewStoreOnboarding />} />
+          <Route path="/onboarding/new" element={<NewStoreOnboarding />} />
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/onboarding" element={<Dashboard />} />
-            <Route path="/onboarding/new" element={<NewStoreOnboarding />} />
-            <Route path="/onboarding/:storeId" element={<Dashboard />} />
             <Route path="/stores" element={<Stores />} />
             <Route path="/products" element={<Products />} />
             <Route path="/categories" element={<Categories />} />
