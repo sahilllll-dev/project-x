@@ -1861,7 +1861,7 @@ app.get('/pages', async (req, res) => {
     if (!storeId) return res.status(400).json({ message: 'store_id is required' })
 
     const { data, error } = await supabase
-      .from('store_pages')
+      .from('pages')
       .select('*')
       .eq('store_id', storeId)
       .neq('slug', '/')
