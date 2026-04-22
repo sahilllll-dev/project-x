@@ -37,7 +37,11 @@ const apps = [
   },
 ]
 
-const allowedOrigins = ['http://localhost:5173', process.env.FRONTEND_URL].filter(Boolean)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  process.env.FRONTEND_URL,
+].filter(Boolean)
 
 app.use(
   cors({
@@ -109,6 +113,12 @@ function normalizeStoreSlug(value) {
     .replace(/\.projectx\.com$/i, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function slugifyCategoryName(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
 }
 
 function normalizeStoreSubdomain(value) {
@@ -389,6 +399,7 @@ function toProduct(row) {
     title: row.title ?? '',
     description: row.description ?? '',
     category: row.category ?? '',
+    categoryId: row.category_id ?? '',
     price: Number(row.price) || 0,
     discountedPrice: Number(row.discounted_price) || 0,
     quantity: Number(row.quantity) || 0,
@@ -411,15 +422,72 @@ function toCategory(row) {
     return null
   }
 
+  const parentId = row.parent_id ?? null
+
   return {
     id: row.id,
-    storeId: row.store_id,
+    storeId: row.store_id ?? null,
+    store_id: row.store_id ?? null,
     name: row.name ?? '',
     slug: row.slug ?? '',
-    parentId: row.parent_id ?? '',
+    parentId,
+    parent_id: parentId,
+    isDefault: Boolean(row.is_default),
+    is_default: Boolean(row.is_default),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+async function attachCategoryNames(products, storeId) {
+  const categoryIds = [
+    ...new Set(products.map((product) => product.categoryId).filter(Boolean).map(String)),
+  ]
+
+  if (categoryIds.length === 0) {
+    return products
+  }
+
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id,name')
+    .in('id', categoryIds)
+    .or(`store_id.eq.${storeId},is_default.eq.true`)
+
+  if (error) {
+    throw error
+  }
+
+  const categoryNameById = new Map(data.map((category) => [String(category.id), category.name]))
+
+  return products.map((product) => {
+    const categoryName = categoryNameById.get(String(product.categoryId))
+
+    return {
+      ...product,
+      category: categoryName || product.category,
+      categoryName: categoryName || product.category,
+    }
+  })
+}
+
+async function categoryBelongsToStoreScope(categoryId, storeId) {
+  if (!categoryId) {
+    return true
+  }
+
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id')
+    .eq('id', categoryId)
+    .or(`store_id.eq.${storeId},is_default.eq.true`)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return Boolean(data)
 }
 
 function toCoupon(row) {
@@ -773,7 +841,7 @@ app.get('/products', async (req, res) => {
 
     if (error) return sendInvalidData(res, error)
 
-    res.json(data.map(toProduct))
+    res.json(await attachCategoryNames(data.map(toProduct), storeId))
   } catch (error) {
     sendServerError(res, error)
   }
@@ -798,7 +866,8 @@ app.get('/product/:slug', async (req, res) => {
 
     if (!product) return res.status(404).json({ message: 'Product not found' })
 
-    res.json(product)
+    const [productWithCategory] = await attachCategoryNames([product], storeId)
+    res.json(productWithCategory)
   } catch (error) {
     sendServerError(res, error)
   }
@@ -815,6 +884,12 @@ app.post('/products', async (req, res) => {
 
     if (!store) return res.status(400).json({ message: 'storeId is required' })
 
+    const categoryId = req.body.categoryId || req.body.category_id || null
+
+    if (!(await categoryBelongsToStoreScope(categoryId, storeId))) {
+      return res.status(400).json({ message: 'Category is not available for this store' })
+    }
+
     const { data, error } = await supabase
       .from('products')
       .insert([
@@ -823,7 +898,7 @@ app.post('/products', async (req, res) => {
           store_id: store.id,
           title: req.body.title,
           description: req.body.description ?? '',
-          category: req.body.category ?? '',
+          category_id: categoryId,
           price: Number(req.body.price) || 0,
           discounted_price: Number(req.body.discountedPrice) || 0,
           quantity: Number(req.body.quantity) || 0,
@@ -861,7 +936,15 @@ app.put('/products/:id', async (req, res) => {
     const update = {}
     if (req.body.title !== undefined) update.title = req.body.title
     if (req.body.description !== undefined) update.description = req.body.description
-    if (req.body.category !== undefined) update.category = req.body.category
+    if (req.body.categoryId !== undefined || req.body.category_id !== undefined) {
+      const categoryId = req.body.categoryId || req.body.category_id || null
+
+      if (!(await categoryBelongsToStoreScope(categoryId, storeId))) {
+        return res.status(400).json({ message: 'Category is not available for this store' })
+      }
+
+      update.category_id = categoryId
+    }
     if (req.body.price !== undefined) update.price = Number(req.body.price) || 0
     if (req.body.discountedPrice !== undefined) update.discounted_price = Number(req.body.discountedPrice) || 0
     if (req.body.quantity !== undefined) update.quantity = Number(req.body.quantity) || 0
@@ -919,7 +1002,9 @@ app.get('/categories', async (req, res) => {
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .eq('store_id', storeId)
+      .or(`store_id.eq.${storeId},is_default.eq.true`)
+      .order('is_default', { ascending: false })
+      .order('name', { ascending: true })
       .order('created_at', { ascending: true })
 
     if (error?.code === '42P01') {
@@ -942,10 +1027,25 @@ app.post('/categories', async (req, res) => {
     if (!storeId) return
 
     const name = String(req.body.name ?? '').trim()
-    const slug = normalizeStoreSlug(req.body.slug ?? name)
+    const slug = slugifyCategoryName(name)
+    const parentId = req.body.parent_id || req.body.parentId || null
 
     if (!name) return res.status(400).json({ message: 'Category name is required' })
     if (!slug) return res.status(400).json({ message: 'Category slug is required' })
+
+    if (parentId) {
+      const { data: parentCategory, error: parentError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', parentId)
+        .or(`store_id.eq.${storeId},is_default.eq.true`)
+        .maybeSingle()
+
+      if (parentError) return sendInvalidData(res, parentError)
+      if (!parentCategory) {
+        return res.status(400).json({ message: 'Parent category is not available for this store' })
+      }
+    }
 
     const { data, error } = await supabase
       .from('categories')
@@ -954,7 +1054,7 @@ app.post('/categories', async (req, res) => {
           store_id: storeId,
           name,
           slug,
-          parent_id: req.body.parentId || req.body.parent_id || null,
+          parent_id: parentId,
         },
       ])
       .select()
@@ -980,6 +1080,9 @@ app.put('/categories/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
     const update = {}
 
     if (req.body.name !== undefined) {
@@ -998,15 +1101,11 @@ app.put('/categories/:id', async (req, res) => {
       update.parent_id = req.body.parentId || req.body.parent_id || null
     }
 
-    let query = supabase
+    const query = supabase
       .from('categories')
       .update(update)
       .eq('id', req.params.id)
-
-    const storeId = getRequestStoreId(req)
-    if (storeId) {
-      query = query.eq('store_id', storeId)
-    }
+      .eq('store_id', storeId)
 
     const { data, error } = await query.select().maybeSingle()
 
@@ -1031,15 +1130,14 @@ app.delete('/categories/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
   try {
-    let query = supabase
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const query = supabase
       .from('categories')
       .delete()
       .eq('id', req.params.id)
-
-    const storeId = getRequestStoreId(req)
-    if (storeId) {
-      query = query.eq('store_id', storeId)
-    }
+      .eq('store_id', storeId)
 
     const { data, error } = await query.select('id').maybeSingle()
 

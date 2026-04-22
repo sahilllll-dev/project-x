@@ -124,7 +124,7 @@ export function deleteProduct(id, storeId) {
 }
 
 export function getCategories(storeId) {
-  const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+  const query = storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''
   return request(`/categories${query}`)
 }
 
@@ -142,8 +142,9 @@ export function updateCategory(id, data) {
   })
 }
 
-export function deleteCategory(id) {
-  return request(`/categories/${id}`, {
+export function deleteCategory(id, storeId) {
+  const query = storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''
+  return request(`/categories/${id}${query}`, {
     method: 'DELETE',
   })
 }

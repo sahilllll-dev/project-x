@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
-import { createOrder, getProducts, getStoreApps, getStoreByUrl, getStorePage, validateCoupon } from '../../utils/api.js'
+import {
+  createOrder,
+  getPageBySlug,
+  getProducts,
+  getStoreApps,
+  getStoreByUrl,
+  getStorePage,
+  validateCoupon,
+} from '../../utils/api.js'
 import ThemeRenderer from '../../components/themes/ThemeRenderer.jsx'
 import PageRenderer from '../../components/page-builder/PageRenderer.jsx'
 import Button from '../../components/ui/Button.jsx'
@@ -13,6 +21,15 @@ function normalizeSubdomain(value) {
     .replace(/\.projectx\.com$/i, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
+}
+
+function normalizePageSlug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function getStoreSlugFromHostname() {
@@ -48,13 +65,17 @@ function formatCurrency(value) {
 }
 
 function StoreFront() {
-  const { storeName = '' } = useParams()
+  const params = useParams()
+  const storeName = params.storeName ?? ''
+  const routePagePath = params['*'] ?? ''
   const location = useLocation()
   const { currentUser, isAppReady } = useAppContext()
   const { showToast } = useToast()
   const [store, setStore] = useState(null)
   const [products, setProducts] = useState([])
   const [pageLayout, setPageLayout] = useState(null)
+  const [customPage, setCustomPage] = useState(null)
+  const [isCustomPageNotFound, setIsCustomPageNotFound] = useState(false)
   const [useSeoProductUrls, setUseSeoProductUrls] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -82,9 +103,15 @@ function StoreFront() {
     return `${storeSubdomain}.projectx.com`
   }, [storeSubdomain])
 
+  const customPageSlug = useMemo(() => normalizePageSlug(routePagePath), [routePagePath])
+
   useEffect(() => {
+    let isCancelled = false
+
     async function loadStoreFront() {
       setIsLoading(true)
+      setCustomPage(null)
+      setIsCustomPageNotFound(false)
 
       try {
         if (!storeSubdomain) {
@@ -92,6 +119,10 @@ function StoreFront() {
         }
 
         const matchedStore = await getStoreByUrl(storeSubdomain)
+        if (isCancelled) {
+          return
+        }
+
         setStore(matchedStore)
         console.log('Store ID:', matchedStore.id)
 
@@ -99,6 +130,10 @@ function StoreFront() {
           getProducts(matchedStore.id),
           getStoreApps(matchedStore.id),
         ])
+        if (isCancelled) {
+          return
+        }
+
         console.log('Products:', response)
         setUseSeoProductUrls(
           installedApps.some((storeApp) => storeApp.appId === 'seo-helper' && storeApp.enabled),
@@ -106,15 +141,48 @@ function StoreFront() {
         const activeProducts = response.filter((product) => product.status === 'active')
         setProducts(activeProducts.length > 0 ? activeProducts : response)
 
-        try {
-          const page = await getStorePage(matchedStore.id)
-          setPageLayout(page.layout)
-        } catch (pageError) {
-          console.error(pageError)
-          setPageLayout(null)
+        if (customPageSlug) {
+          try {
+            const page = await getPageBySlug(customPageSlug, matchedStore.id)
+
+            if (!isCancelled) {
+              setCustomPage(page)
+              setPageLayout(null)
+            }
+          } catch (pageError) {
+            console.error(pageError)
+
+            if (!isCancelled) {
+              setCustomPage(null)
+              setIsCustomPageNotFound(true)
+              setPageLayout(null)
+            }
+
+            if (pageError.status !== 404) {
+              showToast(pageError.message || 'Unable to load page', 'error')
+            }
+          }
+        } else {
+          try {
+            const page = await getStorePage(matchedStore.id)
+
+            if (!isCancelled) {
+              setPageLayout(page.layout)
+            }
+          } catch (pageError) {
+            console.error(pageError)
+
+            if (!isCancelled) {
+              setPageLayout(null)
+            }
+          }
         }
       } catch (error) {
         console.error(error)
+        if (isCancelled) {
+          return
+        }
+
         setStore({
           id: null,
           name: formatStoreNameFromSlug(storeName),
@@ -123,13 +191,21 @@ function StoreFront() {
         setUseSeoProductUrls(false)
         setProducts([])
         setPageLayout(null)
+        setCustomPage(null)
+        setIsCustomPageNotFound(Boolean(customPageSlug))
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
     loadStoreFront()
-  }, [derivedStoreUrl, storeName, storeSubdomain])
+
+    return () => {
+      isCancelled = true
+    }
+  }, [customPageSlug, derivedStoreUrl, showToast, storeName, storeSubdomain])
 
   function handleCheckoutFieldChange(event) {
     const { name, value } = event.target
@@ -241,6 +317,36 @@ function StoreFront() {
   }
 
   function renderTheme() {
+    if (customPageSlug) {
+      if (customPage) {
+        return (
+          <article className="public-store-page">
+            <p className="public-store-page__eyebrow">{store?.name || 'Store page'}</p>
+            <h1>{customPage.title}</h1>
+            <div
+              className="public-store-page__content"
+              dangerouslySetInnerHTML={{ __html: customPage.content || '<p>No content yet.</p>' }}
+            />
+          </article>
+        )
+      }
+
+      if (isCustomPageNotFound) {
+        return (
+          <section className="public-store-page public-store-page--empty">
+            <p className="public-store-page__eyebrow">{store?.name || 'Store page'}</p>
+            <h1>Page not found</h1>
+            <p>The page you are looking for is not available.</p>
+            <Link className="public-store-page__link" to={`/store/${storeSubdomain}`}>
+              Back to store
+            </Link>
+          </section>
+        )
+      }
+
+      return null
+    }
+
     const themeProps = {
       products,
       store,
@@ -272,7 +378,13 @@ function StoreFront() {
             </Link>
           </div>
         ) : null}
-        {isLoading ? <p className="public-store__empty">Loading products...</p> : renderTheme()}
+        {isLoading ? (
+          <p className="public-store__empty">
+            {customPageSlug ? 'Loading page...' : 'Loading products...'}
+          </p>
+        ) : (
+          renderTheme()
+        )}
       </div>
 
       {selectedProduct ? (

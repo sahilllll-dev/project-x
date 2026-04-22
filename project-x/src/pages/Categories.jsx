@@ -12,27 +12,21 @@ import {
 
 const initialFormData = {
   name: '',
-  slug: '',
   parentId: '',
 }
 
-function slugifyCategoryName(value) {
-  return String(value || '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
 function normalizeCategory(category) {
-  const parentId = category.parentId ?? category.parent_id ?? category.parentCategoryId ?? ''
+  const parentId = category.parentId ?? category.parent_id ?? category.parentCategoryId ?? null
+  const storeId = category.storeId ?? category.store_id ?? null
+  const isDefault = Boolean(category.isDefault ?? category.is_default)
 
   return {
     ...category,
     id: category.id,
     name: category.name ?? '',
-    slug: category.slug ?? slugifyCategoryName(category.name),
-    parentId: parentId || '',
+    parentId,
+    storeId,
+    isDefault,
   }
 }
 
@@ -87,7 +81,6 @@ function Categories() {
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryToDelete, setCategoryToDelete] = useState(null)
   const [formData, setFormData] = useState(initialFormData)
-  const [isSlugEdited, setIsSlugEdited] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApiMissing, setIsApiMissing] = useState(false)
 
@@ -102,7 +95,6 @@ function Categories() {
       setEditingCategory(null)
       setCategoryToDelete(null)
       setFormData(initialFormData)
-      setIsSlugEdited(false)
       setIsApiMissing(false)
 
       if (!currentStore?.id) {
@@ -146,18 +138,19 @@ function Categories() {
   function openCreateModal() {
     setEditingCategory(null)
     setFormData(initialFormData)
-    setIsSlugEdited(false)
     setIsModalOpen(true)
   }
 
   function openEditModal(category) {
+    if (category.isDefault) {
+      return
+    }
+
     setEditingCategory(category)
     setFormData({
       name: category.name,
-      slug: category.slug,
       parentId: category.parentId || '',
     })
-    setIsSlugEdited(true)
     setIsModalOpen(true)
   }
 
@@ -171,24 +164,6 @@ function Categories() {
 
   function handleChange(event) {
     const { name, value } = event.target
-
-    if (name === 'name') {
-      setFormData((currentData) => ({
-        ...currentData,
-        name: value,
-        slug: isSlugEdited ? currentData.slug : slugifyCategoryName(value),
-      }))
-      return
-    }
-
-    if (name === 'slug') {
-      setIsSlugEdited(true)
-      setFormData((currentData) => ({
-        ...currentData,
-        slug: slugifyCategoryName(value),
-      }))
-      return
-    }
 
     setFormData((currentData) => ({
       ...currentData,
@@ -205,15 +180,9 @@ function Categories() {
     }
 
     const name = formData.name.trim()
-    const slug = slugifyCategoryName(formData.slug || name)
 
     if (!name) {
       showToast('Category name is required', 'error')
-      return
-    }
-
-    if (!slug) {
-      showToast('Category slug is required', 'error')
       return
     }
 
@@ -221,10 +190,9 @@ function Categories() {
 
     try {
       const payload = {
-        storeId: currentStore.id,
+        store_id: currentStore.id,
         name,
-        slug,
-        parentId: formData.parentId || null,
+        parent_id: formData.parentId || null,
       }
 
       if (editingCategory) {
@@ -255,10 +223,15 @@ function Categories() {
       return
     }
 
+    if (categoryToDelete.isDefault) {
+      setCategoryToDelete(null)
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      await deleteCategory(categoryToDelete.id)
+      await deleteCategory(categoryToDelete.id, currentStore?.id)
       setCategories((currentCategories) =>
         currentCategories.filter((category) => category.id !== categoryToDelete.id),
       )
@@ -307,7 +280,7 @@ function Categories() {
           <div className="categories-table">
             <div className="categories-table__head">
               <span>Category Name</span>
-              <span>Slug</span>
+              <span>Type</span>
               <span>Parent Category</span>
               <span>Actions</span>
             </div>
@@ -321,19 +294,27 @@ function Categories() {
                   {category.depth > 0 ? <span className="categories-table__branch" /> : null}
                   <strong>{category.name}</strong>
                 </div>
-                <span className="categories-table__slug">{category.slug}</span>
+                <span className="categories-table__type">
+                  {category.isDefault ? 'Default' : 'Your category'}
+                </span>
                 <span>{category.parentName}</span>
                 <span className="categories-table__actions">
-                  <Button size="sm" variant="outline" onClick={() => openEditModal(category)}>
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setCategoryToDelete(category)}
-                  >
-                    Delete
-                  </Button>
+                  {category.isDefault ? (
+                    <span className="categories-table__readonly">Included</span>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => openEditModal(category)}>
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCategoryToDelete(category)}
+                      >
+                        Delete
+                      </Button>
+                    </>
+                  )}
                 </span>
               </div>
             ))}
@@ -353,7 +334,6 @@ function Categories() {
             <div className="category-modal__header">
               <div>
                 <h3>{editingCategory ? 'Edit Category' : 'Add Category'}</h3>
-                <p>Keep names simple and slugs storefront-friendly.</p>
               </div>
               <button type="button" onClick={closeModal}>
                 Close
@@ -370,18 +350,6 @@ function Categories() {
                 onChange={handleChange}
                 placeholder="Men Shoes"
                 required
-              />
-            </div>
-
-            <div className="product-form__field">
-              <label htmlFor="category-slug">Slug</label>
-              <input
-                id="category-slug"
-                name="slug"
-                type="text"
-                value={formData.slug}
-                onChange={handleChange}
-                placeholder="men-shoes"
               />
             </div>
 

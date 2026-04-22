@@ -130,6 +130,7 @@ function App() {
         </Route>
 
         <Route path="/store/:storeName" element={<StoreFront />} />
+        <Route path="/store/:storeName/*" element={<StoreFront />} />
         <Route path="/product/:slug" element={<ProductDetail />} />
 
         <Route element={<ProtectedRoute />}>

@@ -59,6 +59,7 @@ create table if not exists public.products (
   title text not null,
   description text default '',
   category text default '',
+  category_id uuid,
   price numeric(12, 2) not null check (price >= 0),
   discounted_price numeric(12, 2) check (discounted_price is null or discounted_price >= 0),
   quantity integer not null default 0 check (quantity >= 0),
@@ -71,16 +72,39 @@ create table if not exists public.products (
 
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
-  store_id uuid not null references public.stores (id) on delete cascade,
+  store_id uuid references public.stores (id) on delete cascade,
   parent_id uuid references public.categories (id) on delete set null,
   name text not null,
   slug text not null,
+  is_default boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create unique index if not exists categories_store_slug_unique
 on public.categories (store_id, slug);
+
+create index if not exists categories_store_default_idx
+on public.categories (store_id, is_default);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'products_category_id_fkey'
+      and conrelid = 'public.products'::regclass
+  ) then
+    alter table public.products
+      add constraint products_category_id_fkey
+      foreign key (category_id)
+      references public.categories (id)
+      on delete set null;
+  end if;
+end $$;
+
+create index if not exists products_category_id_idx
+on public.products (category_id);
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),

@@ -49,6 +49,16 @@ function normalizeText(value) {
   return String(value ?? '').trim().toLowerCase()
 }
 
+function normalizeCategory(category) {
+  return {
+    ...category,
+    id: category.id,
+    name: category.name ?? '',
+    storeId: category.storeId ?? category.store_id ?? null,
+    isDefault: Boolean(category.isDefault ?? category.is_default),
+  }
+}
+
 function getProductSlug(product) {
   return product?.slug || product?.seo?.slug || String(product?.id ?? '')
 }
@@ -162,7 +172,7 @@ function Products() {
         }
 
         setProducts(productResponse)
-        setCategories(categoryResponse)
+        setCategories((categoryResponse ?? []).map(normalizeCategory))
       } catch (error) {
         console.error(error)
       } finally {
@@ -181,37 +191,39 @@ function Products() {
 
   const categoryOptions = useMemo(() => {
     const options = []
-    const categoryNames = new Set()
+    const categoryIds = new Set()
 
     categories.forEach((category) => {
       const categoryName = category.name ?? ''
 
-      if (!categoryName) {
+      if (!category.id || !categoryName || categoryIds.has(String(category.id))) {
         return
       }
 
       options.push({ label: categoryName, value: String(category.id) })
-      categoryNames.add(normalizeText(categoryName))
-    })
-
-    products.forEach((product) => {
-      const productCategory = product.category ?? product.categoryName ?? ''
-      const categoryName = normalizeText(productCategory)
-
-      if (!categoryName || categoryNames.has(categoryName)) {
-        return
-      }
-
-      options.push({ label: productCategory, value: productCategory })
-      categoryNames.add(categoryName)
+      categoryIds.add(String(category.id))
     })
 
     return options
-  }, [categories, products])
+  }, [categories])
 
   const selectedCategory = categories.find(
     (category) => String(category.id) === String(filters.category),
   )
+  const categoryNameById = useMemo(
+    () => new Map(categories.map((category) => [String(category.id), category.name])),
+    [categories],
+  )
+
+  function getProductCategoryLabel(product) {
+    const categoryId = String(product.categoryId ?? product.category_id ?? '')
+
+    if (categoryId && categoryNameById.has(categoryId)) {
+      return categoryNameById.get(categoryId)
+    }
+
+    return product.category || product.categoryName || 'Uncategorized'
+  }
 
   const filteredProducts = products.filter((product) => {
     const productInventory = getProductInventory(product)
@@ -428,7 +440,7 @@ function Products() {
                       {isOutOfStock ? 'Out of stock' : String(productInventory).padStart(2, '0')}
                     </span>
 
-                    <span>{product.category || 'Uncategorized'}</span>
+                    <span>{getProductCategoryLabel(product)}</span>
 
                     <button
                       className={`status-toggle${isActive ? ' status-toggle--active' : ''}`}

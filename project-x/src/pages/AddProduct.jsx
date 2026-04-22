@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import CategorySelect from '../components/CategorySelect.jsx'
 import Button from '../components/ui/Button.jsx'
 import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { createProduct, getCategories, getProducts, updateProduct } from '../utils/api.js'
+import { createProduct, getProducts, updateProduct } from '../utils/api.js'
 
 const initialFormState = {
   title: '',
   description: '',
-  category: '',
+  categoryId: '',
   price: '',
   discountedPrice: '',
   quantity: '',
@@ -43,39 +44,6 @@ function calculateDiscount(price, discountedPrice) {
   return Math.round(((priceValue - discountedValue) / priceValue) * 100)
 }
 
-function normalizeCategory(category) {
-  return {
-    id: category.id,
-    name: category.name ?? '',
-    parentId: category.parentId ?? category.parent_id ?? '',
-  }
-}
-
-function buildCategoryOptions(categories) {
-  const childrenByParentId = new Map()
-  const options = []
-
-  categories.forEach((category) => {
-    const parentKey = category.parentId ? String(category.parentId) : 'root'
-    const children = childrenByParentId.get(parentKey) ?? []
-    children.push(category)
-    childrenByParentId.set(parentKey, children)
-  })
-
-  function appendOptions(parentKey = 'root', depth = 0) {
-    const children = childrenByParentId.get(parentKey) ?? []
-    children
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .forEach((category) => {
-        options.push({ ...category, depth })
-        appendOptions(String(category.id), depth + 1)
-      })
-  }
-
-  appendOptions()
-  return options
-}
-
 function getEditableSnapshot(formData, shippingData, galleryImage, limitSinglePurchase) {
   return JSON.stringify({
     formData,
@@ -103,15 +71,10 @@ function AddProduct() {
     height: '',
   })
   const [galleryImage, setGalleryImage] = useState('')
-  const [categories, setCategories] = useState([])
   const [isSeoSlugEdited, setIsSeoSlugEdited] = useState(false)
   const [initialEditableSnapshot, setInitialEditableSnapshot] = useState('')
 
   const isSeoHelperEnabled = isAppEnabled('seo-helper')
-  const categoryOptions = buildCategoryOptions(categories)
-  const shouldShowCurrentCategoryOption =
-    formData.category &&
-    !categoryOptions.some((category) => category.name === formData.category)
   const currentEditableSnapshot = getEditableSnapshot(
     formData,
     shippingData,
@@ -143,7 +106,7 @@ function AddProduct() {
         const nextFormData = {
           title: currentProduct.title ?? '',
           description: currentProduct.description ?? '',
-          category: currentProduct.category ?? '',
+          categoryId: currentProduct.categoryId ?? currentProduct.category_id ?? '',
           price: String(currentProduct.price ?? ''),
           discountedPrice: String(currentProduct.discountedPrice ?? ''),
           quantity: String(currentProduct.quantity ?? ''),
@@ -189,36 +152,6 @@ function AddProduct() {
     loadProduct()
   }, [currentStore?.id, id, isEditMode, navigate])
 
-  useEffect(() => {
-    let isCancelled = false
-
-    async function loadCategories() {
-      if (!currentStore?.id) {
-        setCategories([])
-        return
-      }
-
-      try {
-        const response = await getCategories(currentStore.id)
-
-        if (!isCancelled) {
-          setCategories((response ?? []).map(normalizeCategory))
-        }
-      } catch (error) {
-        console.error(error)
-        if (!isCancelled) {
-          setCategories([])
-        }
-      }
-    }
-
-    loadCategories()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [currentStore?.id])
-
   function handleChange(event) {
     const { name, value } = event.target
 
@@ -238,6 +171,13 @@ function AddProduct() {
     setErrors((currentErrors) => ({
       ...currentErrors,
       [name]: '',
+    }))
+  }
+
+  function handleCategoryChange(categoryId) {
+    setFormData((currentData) => ({
+      ...currentData,
+      categoryId: categoryId || '',
     }))
   }
 
@@ -372,7 +312,7 @@ function AddProduct() {
       storeId: currentStore.id,
       title: formData.title.trim(),
       description: formData.description.trim(),
-      category: formData.category.trim(),
+      categoryId: formData.categoryId || null,
       price: Number(formData.price) || 0,
       discountedPrice: Number(formData.discountedPrice) || 0,
       quantity: Number(formData.quantity) || 0,
@@ -468,23 +408,13 @@ function AddProduct() {
             </div>
 
             <div className="product-form__field">
-              <label htmlFor="category">Category</label>
-              <select
-                id="category"
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-              >
-                <option value="">Select category</option>
-                {shouldShowCurrentCategoryOption ? (
-                  <option value={formData.category}>{formData.category}</option>
-                ) : null}
-                {categoryOptions.map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {`${'-- '.repeat(category.depth)}${category.name}`}
-                  </option>
-                ))}
-              </select>
+              <label>Category</label>
+              <CategorySelect
+                disabled={!currentStore?.id}
+                storeId={currentStore?.id}
+                value={formData.categoryId}
+                onChange={handleCategoryChange}
+              />
             </div>
           </SurfaceCard>
 
