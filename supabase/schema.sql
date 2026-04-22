@@ -122,9 +122,15 @@ create table if not exists public.store_pages (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references public.stores (id) on delete cascade,
   name text not null default 'homepage',
+  title text not null default '',
   slug text not null default '/',
+  content text not null default '',
+  status text not null default 'draft',
+  meta_title text not null default '',
+  meta_description text not null default '',
   layout jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create unique index if not exists store_pages_store_slug_unique
@@ -157,6 +163,11 @@ for each row execute procedure public.handle_updated_at();
 drop trigger if exists categories_handle_updated_at on public.categories;
 create trigger categories_handle_updated_at
 before update on public.categories
+for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists store_pages_handle_updated_at on public.store_pages;
+create trigger store_pages_handle_updated_at
+before update on public.store_pages
 for each row execute procedure public.handle_updated_at();
 
 drop trigger if exists orders_handle_updated_at on public.orders;

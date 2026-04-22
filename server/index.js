@@ -174,14 +174,39 @@ function toStorePage(row) {
     return null
   }
 
+  const title = row.title ?? row.name ?? 'Untitled page'
+
   return {
     id: row.id,
     storeId: row.store_id,
     name: row.name ?? 'homepage',
+    title,
     slug: row.slug ?? '/',
+    content: row.content ?? '',
+    status: row.status ?? 'draft',
+    metaTitle: row.meta_title ?? '',
+    metaDescription: row.meta_description ?? '',
     layout: row.layout ?? {},
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
   }
+}
+
+function normalizePageSlug(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function normalizePageStatus(value) {
+  return value === 'published' ? 'published' : 'draft'
+}
+
+function getRequestPageStoreId(req) {
+  return req.query.store_id ?? req.query.storeId ?? req.body?.store_id ?? req.body?.storeId
 }
 
 function getDefaultPageLayout() {
@@ -1828,6 +1853,206 @@ app.post('/api/theme/config', async (req, res) => {
   }
 })
 
+app.get('/pages', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = getRequestPageStoreId(req)
+    if (!storeId) return res.status(400).json({ message: 'store_id is required' })
+
+    const { data, error } = await supabase
+      .from('store_pages')
+      .select('*')
+      .eq('store_id', storeId)
+      .neq('slug', '/')
+      .order('updated_at', { ascending: false })
+
+    if (error) return sendInvalidData(res, error)
+
+    res.json(data.map(toStorePage))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/pages/slug/:slug', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = getRequestPageStoreId(req)
+    const slug = normalizePageSlug(req.params.slug)
+
+    if (!storeId) return res.status(400).json({ message: 'store_id is required' })
+    if (!slug) return res.status(400).json({ message: 'slug is required' })
+
+    const { data, error } = await supabase
+      .from('store_pages')
+      .select('*')
+      .eq('store_id', storeId)
+      .eq('slug', slug)
+      .maybeSingle()
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Page not found' })
+
+    res.json(toStorePage(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/pages/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = getRequestPageStoreId(req)
+    if (!storeId) return res.status(400).json({ message: 'store_id is required' })
+
+    const { data, error } = await supabase
+      .from('store_pages')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('store_id', storeId)
+      .maybeSingle()
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Page not found' })
+
+    res.json(toStorePage(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.post('/pages', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = getRequestPageStoreId(req)
+    const title = String(req.body.title ?? '').trim()
+    const slug = normalizePageSlug(req.body.slug)
+
+    if (!storeId) return res.status(400).json({ message: 'store_id is required' })
+    if (!title) return res.status(400).json({ message: 'title is required' })
+    if (!slug) return res.status(400).json({ message: 'slug is required' })
+
+    const { data: existingPage, error: existingError } = await supabase
+      .from('store_pages')
+      .select('id')
+      .eq('store_id', storeId)
+      .eq('slug', slug)
+      .maybeSingle()
+
+    if (existingError) return sendInvalidData(res, existingError)
+    if (existingPage) return res.status(400).json({ message: 'slug must be unique per store' })
+
+    const { data, error } = await supabase
+      .from('store_pages')
+      .insert([
+        {
+          store_id: storeId,
+          name: title,
+          title,
+          slug,
+          content: req.body.content ?? '',
+          status: normalizePageStatus(req.body.status),
+          meta_title: req.body.meta_title ?? req.body.metaTitle ?? '',
+          meta_description: req.body.meta_description ?? req.body.metaDescription ?? '',
+          layout: {},
+        },
+      ])
+      .select()
+      .single()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'slug must be unique per store' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+
+    res.status(201).json(toStorePage(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.put('/pages/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = getRequestPageStoreId(req)
+    const title = String(req.body.title ?? '').trim()
+    const slug = normalizePageSlug(req.body.slug)
+
+    if (!storeId) return res.status(400).json({ message: 'store_id is required' })
+    if (!title) return res.status(400).json({ message: 'title is required' })
+    if (!slug) return res.status(400).json({ message: 'slug is required' })
+
+    const { data: existingPage, error: existingError } = await supabase
+      .from('store_pages')
+      .select('id')
+      .eq('store_id', storeId)
+      .eq('slug', slug)
+      .neq('id', req.params.id)
+      .maybeSingle()
+
+    if (existingError) return sendInvalidData(res, existingError)
+    if (existingPage) return res.status(400).json({ message: 'slug must be unique per store' })
+
+    const { data, error } = await supabase
+      .from('store_pages')
+      .update({
+        name: title,
+        title,
+        slug,
+        content: req.body.content ?? '',
+        status: normalizePageStatus(req.body.status),
+        meta_title: req.body.meta_title ?? req.body.metaTitle ?? '',
+        meta_description: req.body.meta_description ?? req.body.metaDescription ?? '',
+      })
+      .eq('id', req.params.id)
+      .eq('store_id', storeId)
+      .select()
+      .maybeSingle()
+
+    if (error?.code === '23505') {
+      return res.status(400).json({ message: 'slug must be unique per store' })
+    }
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Page not found' })
+
+    res.json(toStorePage(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.delete('/pages/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = getRequestPageStoreId(req)
+    if (!storeId) return res.status(400).json({ message: 'store_id is required' })
+
+    const { data, error } = await supabase
+      .from('store_pages')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('store_id', storeId)
+      .neq('slug', '/')
+      .select('id')
+      .maybeSingle()
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Page not found' })
+
+    res.json({ message: 'Page deleted successfully' })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
 app.get('/store-page/:storeId', async (req, res) => {
   if (!requireSupabase(res)) return
 
@@ -1876,7 +2101,7 @@ app.post('/api/page/save', async (req, res) => {
 
   const { data, error } = await supabase
     .from('store_pages')
-    .upsert([{ store_id: storeId, name, slug, layout }], { onConflict: 'store_id,slug' })
+    .upsert([{ store_id: storeId, name, title: name, slug, layout }], { onConflict: 'store_id,slug' })
     .select()
     .single()
 

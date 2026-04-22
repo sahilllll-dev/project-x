@@ -337,6 +337,42 @@ export function saveStorePage({ storeId, name = 'homepage', slug = '/', layout }
   })
 }
 
+export function getPages(storeId) {
+  const params = new URLSearchParams({ store_id: String(storeId) })
+  return request(`/pages?${params.toString()}`)
+}
+
+export function getPage(pageId, storeId) {
+  const params = new URLSearchParams({ store_id: String(storeId) })
+  return request(`/pages/${pageId}?${params.toString()}`)
+}
+
+export function getPageBySlug(slug, storeId) {
+  const params = new URLSearchParams({ store_id: String(storeId) })
+  return request(`/pages/slug/${encodeURIComponent(slug)}?${params.toString()}`)
+}
+
+export function createPage(data) {
+  return request('/pages', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function updatePage(pageId, data) {
+  return request(`/pages/${pageId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export function deletePage(pageId, storeId) {
+  const params = new URLSearchParams({ store_id: String(storeId) })
+  return request(`/pages/${pageId}?${params.toString()}`, {
+    method: 'DELETE',
+  })
+}
+
 export function getApps() {
   return request('/apps')
 }

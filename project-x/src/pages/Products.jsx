@@ -1,17 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import ListViewContainer from '../components/ListViewContainer.jsx'
 import Button from '../components/ui/Button.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { deleteProduct, getProducts, updateProduct } from '../utils/api.js'
+import { deleteProduct, getCategories, getProducts, updateProduct } from '../utils/api.js'
 
 const statusFilters = [
   { label: 'All', value: 'all' },
   { label: 'Active', value: 'active' },
-  { label: 'Out of Stock', value: 'out-of-stock' },
-  { label: 'Disabled', value: 'inactive' },
+  { label: 'Disabled', value: 'disabled' },
 ]
+
+const initialFilters = {
+  status: 'all',
+  category: 'all',
+  lowStock: false,
+  outOfStock: false,
+  search: '',
+}
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('en-IN', {
@@ -25,26 +32,114 @@ function getProductImage(product) {
   return product?.image || product?.imageUrl || product?.thumbnail || ''
 }
 
+function getProductInventory(product) {
+  const inventory = Number(product?.inventory ?? product?.quantity ?? 0)
+  return Number.isFinite(inventory) ? inventory : 0
+}
+
+function getProductStatus(product) {
+  if (product?.status === 'inactive') {
+    return 'disabled'
+  }
+
+  return product?.status || 'disabled'
+}
+
+function normalizeText(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function getProductSlug(product) {
+  return product?.slug || product?.seo?.slug || String(product?.id ?? '')
+}
+
+function getProductShareUrl(product) {
+  const productPath = `/product/${encodeURIComponent(getProductSlug(product))}`
+
+  if (typeof window === 'undefined') {
+    return productPath
+  }
+
+  return `${window.location.origin}${productPath}`
+}
+
+function ShareModal({ product, onClose, onCopy }) {
+  const productUrl = getProductShareUrl(product)
+  const encodedProductUrl = encodeURIComponent(productUrl)
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div
+        className="share-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-product-title"
+      >
+        <div className="share-modal__header">
+          <h3 id="share-product-title">Share Product</h3>
+          <button type="button" onClick={onClose} aria-label="Close share modal">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="share-modal__field">
+          <label htmlFor="share-product-url">Product link</label>
+          <div className="share-modal__copy-row">
+            <input id="share-product-url" type="text" value={productUrl} readOnly />
+            <Button variant="outline" onClick={() => onCopy(productUrl)}>
+              Copy
+            </Button>
+          </div>
+        </div>
+
+        <div className="share-modal__socials" aria-label="Social share links">
+          <a
+            href={`https://wa.me/?text=${encodedProductUrl}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            WhatsApp
+          </a>
+          <a
+            href={`https://twitter.com/intent/tweet?url=${encodedProductUrl}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Twitter (X)
+          </a>
+          <a
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodedProductUrl}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Facebook
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Products() {
   const navigate = useNavigate()
   const { currentStore, storeSwitchVersion } = useAppContext()
   const { showToast } = useToast()
   const [products, setProducts] = useState([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeFilter, setActiveFilter] = useState('all')
+  const [categories, setCategories] = useState([])
+  const [filters, setFilters] = useState(initialFilters)
   const [isLoading, setIsLoading] = useState(true)
-  const [productToDeactivate, setProductToDeactivate] = useState(null)
-  const [productToDelete, setProductToDelete] = useState(null)
+  const [productToShare, setProductToShare] = useState(null)
 
   useEffect(() => {
     let isCancelled = false
 
     async function loadProducts() {
       setProducts([])
-      setSearchTerm('')
-      setActiveFilter('all')
-      setProductToDeactivate(null)
-      setProductToDelete(null)
+      setCategories([])
+      setFilters(initialFilters)
+      setProductToShare(null)
 
       if (!currentStore?.id) {
         setIsLoading(false)
@@ -54,11 +149,20 @@ function Products() {
       setIsLoading(true)
 
       try {
-        const response = await getProducts(currentStore.id)
+        const [productResponse, categoryResponse] = await Promise.all([
+          getProducts(currentStore.id),
+          getCategories(currentStore.id).catch((error) => {
+            console.error(error)
+            return []
+          }),
+        ])
+
         if (isCancelled) {
           return
         }
-        setProducts(response)
+
+        setProducts(productResponse)
+        setCategories(categoryResponse)
       } catch (error) {
         console.error(error)
       } finally {
@@ -75,36 +179,90 @@ function Products() {
     }
   }, [currentStore?.id, storeSwitchVersion])
 
+  const categoryOptions = useMemo(() => {
+    const options = []
+    const categoryNames = new Set()
+
+    categories.forEach((category) => {
+      const categoryName = category.name ?? ''
+
+      if (!categoryName) {
+        return
+      }
+
+      options.push({ label: categoryName, value: String(category.id) })
+      categoryNames.add(normalizeText(categoryName))
+    })
+
+    products.forEach((product) => {
+      const productCategory = product.category ?? product.categoryName ?? ''
+      const categoryName = normalizeText(productCategory)
+
+      if (!categoryName || categoryNames.has(categoryName)) {
+        return
+      }
+
+      options.push({ label: productCategory, value: productCategory })
+      categoryNames.add(categoryName)
+    })
+
+    return options
+  }, [categories, products])
+
+  const selectedCategory = categories.find(
+    (category) => String(category.id) === String(filters.category),
+  )
+
   const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category?.toLowerCase().includes(searchTerm.toLowerCase())
+    const productInventory = getProductInventory(product)
+    const productCategory = normalizeText(product.category ?? product.categoryName)
+    const productCategoryId = String(product.categoryId ?? product.category_id ?? '')
+    const selectedCategoryName = normalizeText(selectedCategory?.name ?? filters.category)
 
-    if (!matchesSearch) {
-      return false
-    }
+    const matchStatus =
+      filters.status === 'all' ||
+      getProductStatus(product) === filters.status
 
-    if (activeFilter === 'all') {
-      return true
-    }
+    const matchCategory =
+      filters.category === 'all' ||
+      productCategoryId === String(filters.category) ||
+      productCategory === normalizeText(filters.category) ||
+      productCategory === selectedCategoryName
 
-    if (activeFilter === 'out-of-stock') {
-      return Number(product.quantity) === 0
-    }
+    const matchLowStock =
+      !filters.lowStock ||
+      productInventory <= 5
 
-    return product.status === activeFilter
+    const matchOutOfStock =
+      !filters.outOfStock ||
+      productInventory === 0
+
+    const matchSearch = normalizeText(product.title).includes(normalizeText(filters.search))
+
+    return matchStatus && matchCategory && matchLowStock && matchOutOfStock && matchSearch
   })
 
-  async function handleDelete(productId) {
+  function updateFilters(nextFilters) {
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      ...nextFilters,
+    }))
+  }
+
+  async function handleDelete(product) {
     if (!currentStore?.id) {
       showToast('Select a store first', 'error')
       return
     }
 
+    if (!window.confirm('Are you sure you want to delete this product?')) {
+      return
+    }
+
     try {
-      await deleteProduct(productId, currentStore.id)
+      await deleteProduct(product.id, currentStore.id)
       setProducts((currentProducts) =>
-        currentProducts.filter((product) => product.id !== productId),
+        currentProducts.filter((currentProduct) => currentProduct.id !== product.id),
       )
       showToast('Product deleted', 'success')
     } catch (error) {
@@ -119,58 +277,94 @@ function Products() {
       return
     }
 
+    const previousProduct = products.find((product) => product.id === productId)
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) =>
+        product.id === productId ? { ...product, status: nextStatus } : product,
+      ),
+    )
+
     try {
       await updateProduct(productId, { status: nextStatus, storeId: currentStore.id })
-      setProducts((currentProducts) =>
-        currentProducts.map((product) =>
-          product.id === productId ? { ...product, status: nextStatus } : product,
-        ),
-      )
-      showToast(nextStatus === 'active' ? 'Product activated' : 'Product deactivated', 'success')
+      showToast(nextStatus === 'active' ? 'Product activated' : 'Product disabled', 'success')
     } catch (error) {
       console.error(error)
+      setProducts((currentProducts) =>
+        currentProducts.map((product) =>
+          product.id === productId && previousProduct ? previousProduct : product,
+        ),
+      )
       showToast(error.message || 'Something went wrong', 'error')
     }
   }
 
   function handleStatusToggle(product) {
-    if (product.status === 'active') {
-      setProductToDeactivate(product)
-      return
-    }
+    const nextStatus = getProductStatus(product) === 'active' ? 'disabled' : 'active'
+    applyStatusUpdate(product.id, nextStatus)
+  }
 
-    applyStatusUpdate(product.id, 'active')
+  async function handleCopyProductLink(productUrl) {
+    try {
+      await navigator.clipboard.writeText(productUrl)
+      showToast('Link copied', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast('Unable to copy link', 'error')
+    }
   }
 
   return (
     <>
       <div className="products-page">
         <section className="products-toolbar">
-          <div className="products-toolbar__controls">
-            <button className="products-toolbar__control" type="button">
-              <span aria-hidden="true">▦</span>
-              Last 7 days
-              <span aria-hidden="true">⌄</span>
-            </button>
-            <button className="products-toolbar__control" type="button">
-              <span aria-hidden="true">▽</span>
-              Filter
-              <span aria-hidden="true">⌄</span>
-            </button>
-          </div>
-
           <div className="products-toolbar__filters">
             {statusFilters.map((filter) => (
               <Button
                 key={filter.value}
-                active={activeFilter === filter.value}
+                active={filters.status === filter.value}
                 className="products-filter"
                 variant="outline"
-                onClick={() => setActiveFilter(filter.value)}
+                onClick={() => updateFilters({ status: filter.value })}
               >
                 {filter.label}
               </Button>
             ))}
+          </div>
+
+          <div className="products-toolbar__controls">
+            <label className="products-toolbar__select">
+              <span>Category</span>
+              <select
+                value={filters.category}
+                onChange={(event) => updateFilters({ category: event.target.value })}
+              >
+                <option value="all">All categories</option>
+                {categoryOptions.map((category) => (
+                  <option key={`${category.value}-${category.label}`} value={category.value}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="products-stock-filter">
+              <input
+                type="checkbox"
+                checked={filters.lowStock}
+                onChange={(event) => updateFilters({ lowStock: event.target.checked })}
+              />
+              <span>Low stock</span>
+            </label>
+
+            <label className="products-stock-filter">
+              <input
+                type="checkbox"
+                checked={filters.outOfStock}
+                onChange={(event) => updateFilters({ outOfStock: event.target.checked })}
+              />
+              <span>Out of stock</span>
+            </label>
           </div>
         </section>
 
@@ -181,19 +375,14 @@ function Products() {
                 <span aria-hidden="true">⌕</span>
                 <input
                   type="search"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
+                  value={filters.search}
+                  onChange={(event) => updateFilters({ search: event.target.value })}
                   placeholder="Search Products"
                 />
               </label>
               <Button as={Link} to="/products/new" className="products-card__add" variant="primary">
                 + Add Product
               </Button>
-              <button className="products-card__menu" type="button" aria-label="More product actions">
-                <span />
-                <span />
-                <span />
-              </button>
             </div>
           }
           isLoading={isLoading}
@@ -213,8 +402,10 @@ function Products() {
               </div>
 
               {filteredProducts.map((product) => {
-                const isActive = product.status === 'active'
-                const isOutOfStock = Number(product.quantity) === 0
+                const productInventory = getProductInventory(product)
+                const isActive = getProductStatus(product) === 'active'
+                const isLowStock = productInventory <= 5
+                const isOutOfStock = productInventory === 0
 
                 return (
                   <div className="products-table__row" key={product.id}>
@@ -233,8 +424,8 @@ function Products() {
 
                     <span>{formatCurrency(product.price)}</span>
 
-                    <span className={isOutOfStock ? 'inventory inventory--empty' : 'inventory inventory--available'}>
-                      {isOutOfStock ? 'Out of stock' : String(product.quantity).padStart(2, '0')}
+                    <span className={isLowStock ? 'inventory inventory--low' : 'inventory inventory--available'}>
+                      {isOutOfStock ? 'Out of stock' : String(productInventory).padStart(2, '0')}
                     </span>
 
                     <span>{product.category || 'Uncategorized'}</span>
@@ -243,7 +434,7 @@ function Products() {
                       className={`status-toggle${isActive ? ' status-toggle--active' : ''}`}
                       type="button"
                       onClick={() => handleStatusToggle(product)}
-                      aria-label={`Set ${product.title} as ${isActive ? 'inactive' : 'active'}`}
+                      aria-label={`Set ${product.title} as ${isActive ? 'disabled' : 'active'}`}
                     >
                       <span className="status-toggle__dot" />
                       {isActive ? 'Active' : 'Disabled'}
@@ -257,11 +448,16 @@ function Products() {
                         aria-label={`Edit ${product.title}`}
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                          <circle cx="12" cy="12" r="2.8" />
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
                         </svg>
                       </button>
-                      <button className="products-action-button" type="button" aria-label={`Share ${product.title}`}>
+                      <button
+                        className="products-action-button"
+                        type="button"
+                        onClick={() => setProductToShare(product)}
+                        aria-label={`Share ${product.title}`}
+                      >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <circle cx="18" cy="5" r="3" />
                           <circle cx="6" cy="12" r="3" />
@@ -270,14 +466,18 @@ function Products() {
                         </svg>
                       </button>
                       <button
-                        className="products-action-button products-action-button--kebab"
+                        className="products-action-button products-action-button--danger"
                         type="button"
-                        onClick={() => setProductToDelete(product)}
+                        onClick={() => handleDelete(product)}
                         aria-label={`Delete ${product.title}`}
                       >
-                        <span />
-                        <span />
-                        <span />
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v5" />
+                          <path d="M14 11v5" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -287,65 +487,12 @@ function Products() {
         </ListViewContainer>
       </div>
 
-      {productToDeactivate ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            className="confirm-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="deactivate-product-title"
-          >
-            <h3 id="deactivate-product-title">Deactivate Product?</h3>
-            <p>
-              {productToDeactivate.title} will be hidden from active listings until
-              you enable it again.
-            </p>
-            <div className="confirm-modal__actions">
-              <Button variant="outline" onClick={() => setProductToDeactivate(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  await applyStatusUpdate(productToDeactivate.id, 'inactive')
-                  setProductToDeactivate(null)
-                }}
-              >
-                Deactivate
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {productToDelete ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            className="confirm-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-product-title"
-          >
-            <h3 id="delete-product-title">Delete Product?</h3>
-            <p>
-              {productToDelete.title} will be permanently removed from this store.
-            </p>
-            <div className="confirm-modal__actions">
-              <Button variant="outline" onClick={() => setProductToDelete(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  await handleDelete(productToDelete.id)
-                  setProductToDelete(null)
-                }}
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
+      {productToShare ? (
+        <ShareModal
+          product={productToShare}
+          onClose={() => setProductToShare(null)}
+          onCopy={handleCopyProductLink}
+        />
       ) : null}
     </>
   )

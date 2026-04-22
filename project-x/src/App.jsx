@@ -16,6 +16,7 @@ import NewStoreOnboarding from './pages/NewStoreOnboarding.jsx'
 import OrderDetails from './pages/dashboard/OrderDetails.jsx'
 import Orders from './pages/dashboard/Orders.jsx'
 import Pages from './pages/Pages.jsx'
+import PagePreview from './pages/PagePreview.jsx'
 import Payments from './pages/Payments.jsx'
 import Products from './pages/Products.jsx'
 import ProductDetail from './pages/store/ProductDetail.jsx'
@@ -152,6 +153,9 @@ function App() {
             <Route path="/dashboard/coupons" element={<Coupons />} />
             <Route path="/apps" element={<Apps />} />
             <Route path="/pages" element={<Pages />} />
+            <Route path="/pages/create" element={<Pages mode="create" />} />
+            <Route path="/pages/edit/:id" element={<Pages mode="edit" />} />
+            <Route path="/preview/page/:slug" element={<PagePreview />} />
           </Route>
         </Route>
       </Routes>
