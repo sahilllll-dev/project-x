@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, Plus, Search } from 'lucide-react'
 import { createCategory, getCategories } from '../utils/api.js'
 import { useToast } from '../context/ToastContext.jsx'
+import { categoryIcons } from './categoryIcons.js'
 import Button from './ui/Button.jsx'
 import SurfaceCard from './ui/SurfaceCard.jsx'
 
@@ -15,6 +17,7 @@ function normalizeCategory(category) {
     storeId,
     store_id: storeId,
     name: category.name ?? '',
+    slug: category.slug ?? '',
     parentId,
     parent_id: parentId,
     isDefault,
@@ -50,6 +53,68 @@ function buildCategoryRows(categories) {
 
   appendRows()
   return rows
+}
+
+function buildCategoryTree(categories) {
+  const map = new Map()
+  const roots = []
+
+  categories.forEach((category) => {
+    map.set(String(category.id), { ...category, children: [] })
+  })
+
+  categories.forEach((category) => {
+    const node = map.get(String(category.id))
+    const parentId = category.parent_id ?? category.parentId
+
+    if (parentId && map.has(String(parentId))) {
+      map.get(String(parentId)).children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+
+  function sortNodes(nodes) {
+    nodes.sort((left, right) => left.name.localeCompare(right.name))
+    nodes.forEach((node) => sortNodes(node.children))
+  }
+
+  sortNodes(roots)
+  return roots
+}
+
+function getSearchScopedCategories(categories, searchTerm) {
+  if (!searchTerm) {
+    return categories
+  }
+
+  const categoriesById = new Map(
+    categories.map((category) => [String(category.id), category]),
+  )
+  const visibleIds = new Set()
+
+  categories.forEach((category) => {
+    if (!category.name.toLowerCase().includes(searchTerm)) {
+      return
+    }
+
+    let currentCategory = category
+
+    while (currentCategory) {
+      const currentId = String(currentCategory.id)
+
+      if (visibleIds.has(currentId)) {
+        break
+      }
+
+      visibleIds.add(currentId)
+
+      const parentId = currentCategory.parent_id ?? currentCategory.parentId
+      currentCategory = parentId ? categoriesById.get(String(parentId)) : null
+    }
+  })
+
+  return categories.filter((category) => visibleIds.has(String(category.id)))
 }
 
 function CategoryModal({
@@ -163,6 +228,7 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalInitialName, setModalInitialName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [expanded, setExpanded] = useState({})
 
   const scopedCategories = useMemo(
     () =>
@@ -172,18 +238,75 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
       ),
     [categories, storeId],
   )
-  const categoryRows = useMemo(() => buildCategoryRows(scopedCategories), [scopedCategories])
   const searchTerm = search.trim().toLowerCase()
-  const filteredRows = searchTerm
-    ? categoryRows.filter((category) => category.name.toLowerCase().includes(searchTerm))
-    : categoryRows
-  const defaultRows = filteredRows.filter((category) => category.isDefault)
-  const storeRows = filteredRows.filter((category) => !category.isDefault)
-  const selectedCategory = scopedCategories.find(
-    (category) => String(category.id) === String(value ?? ''),
+  const defaultCategories = useMemo(
+    () => scopedCategories.filter((category) => category.isDefault),
+    [scopedCategories],
   )
-  const hasSearchMatch = filteredRows.length > 0
+  const storeCategories = useMemo(
+    () => scopedCategories.filter((category) => !category.isDefault),
+    [scopedCategories],
+  )
+  const visibleDefaultCategories = useMemo(
+    () => getSearchScopedCategories(defaultCategories, searchTerm),
+    [defaultCategories, searchTerm],
+  )
+  const visibleStoreCategories = useMemo(
+    () => getSearchScopedCategories(storeCategories, searchTerm),
+    [storeCategories, searchTerm],
+  )
+  const defaultTree = useMemo(
+    () => buildCategoryTree(visibleDefaultCategories),
+    [visibleDefaultCategories],
+  )
+  const storeTree = useMemo(
+    () => buildCategoryTree(visibleStoreCategories),
+    [visibleStoreCategories],
+  )
+  const selectedCategory = useMemo(
+    () => scopedCategories.find((category) => String(category.id) === String(value ?? '')),
+    [scopedCategories, value],
+  )
+  const selectedAncestorIds = useMemo(() => {
+    const ancestors = new Set()
+
+    if (!selectedCategory?.parentId) {
+      return ancestors
+    }
+
+    const categoriesById = new Map(
+      scopedCategories.map((category) => [String(category.id), category]),
+    )
+    let parentId = selectedCategory.parentId
+
+    while (parentId) {
+      ancestors.add(String(parentId))
+      parentId = categoriesById.get(String(parentId))?.parentId ?? null
+    }
+
+    return ancestors
+  }, [scopedCategories, selectedCategory])
+  const expandedCategoryIds = useMemo(
+    () =>
+      selectedAncestorIds.size === 0
+        ? expanded
+        : {
+            ...expanded,
+            ...Object.fromEntries([...selectedAncestorIds].map((categoryId) => [categoryId, true])),
+          },
+    [expanded, selectedAncestorIds],
+  )
+  const hasSearchMatch = scopedCategories.some((category) =>
+    category.name.toLowerCase().includes(searchTerm),
+  )
   const shouldShowCreateFromSearch = Boolean(searchTerm) && !hasSearchMatch
+
+  function toggle(categoryId) {
+    setExpanded((currentExpanded) => ({
+      ...currentExpanded,
+      [categoryId]: !currentExpanded[categoryId],
+    }))
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -285,33 +408,76 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
     }
   }
 
-  function renderRows(rows, emptyMessage) {
-    if (rows.length === 0) {
+  function renderTree(nodes, level = 0) {
+    return nodes.map((node) => {
+      const Icon = categoryIcons[String(node.slug ?? '').toLowerCase()]
+      const hasChildren = node.children.length > 0
+      const isExpanded = Boolean(expandedCategoryIds[node.id]) || Boolean(searchTerm)
+      const isRootCategory = !node.parent_id && !node.parentId
+      const isSelected = String(node.id) === String(value ?? '')
+
+      return (
+        <div className="category-select__tree-item" key={node.id}>
+          <div
+            className={`category-select__tree-row${isSelected ? ' category-select__tree-row--selected' : ''}`}
+            role="treeitem"
+            aria-expanded={hasChildren ? isExpanded : undefined}
+            aria-level={level + 1}
+            aria-selected={isSelected}
+            style={{ '--category-level': level }}
+          >
+            <button
+              className="category-select__toggle"
+              type="button"
+              disabled={!hasChildren}
+              aria-label={isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
+              onClick={() => toggle(node.id)}
+            >
+              {hasChildren ? (
+                isExpanded ? (
+                  <ChevronDown size={15} aria-hidden="true" />
+                ) : (
+                  <ChevronRight size={15} aria-hidden="true" />
+                )
+              ) : null}
+            </button>
+
+            <button
+              className="category-select__node"
+              type="button"
+              onClick={() => handleSelect(node)}
+            >
+              {isRootCategory && Icon ? (
+                <span className="category-select__node-icon" aria-hidden="true">
+                  <Icon size={16} />
+                </span>
+              ) : (
+                <span className="category-select__node-icon-placeholder" aria-hidden="true" />
+              )}
+              <span className="category-select__node-name">{node.name}</span>
+            </button>
+          </div>
+
+          {hasChildren && isExpanded ? (
+            <div className="category-select__tree-children" role="group">
+              {renderTree(node.children, level + 1)}
+            </div>
+          ) : null}
+        </div>
+      )
+    })
+  }
+
+  function renderTreeSection(tree, emptyMessage) {
+    if (tree.length === 0) {
       return <p className="category-select__empty">{emptyMessage}</p>
     }
 
-    return rows.map((category) => {
-      const isSelected = String(category.id) === String(value ?? '')
-
-      return (
-        <button
-          className={`category-select__option${isSelected ? ' category-select__option--selected' : ''}`}
-          key={category.id}
-          type="button"
-          style={{ '--category-depth': category.depth }}
-          onClick={() => handleSelect(category)}
-          role="option"
-          aria-selected={isSelected}
-        >
-          {category.depth > 0 ? (
-            <span className="category-select__branch" aria-hidden="true">
-              &rarr;
-            </span>
-          ) : null}
-          <span>{category.name}</span>
-        </button>
-      )
-    })
+    return (
+      <div className="category-select__tree" role="tree">
+        {renderTree(tree)}
+      </div>
+    )
   }
 
   return (
@@ -323,18 +489,13 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
         onClick={() => setIsOpen((currentValue) => !currentValue)}
       >
         <span>{selectedCategory?.name || 'Select category'}</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        <ChevronDown size={18} aria-hidden="true" />
       </button>
 
       {isOpen ? (
         <div className="category-select__menu">
           <label className="category-select__search">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m16 16 4 4" />
-            </svg>
+            <Search size={17} aria-hidden="true" />
             <input
               type="search"
               value={search}
@@ -344,7 +505,7 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
             />
           </label>
 
-          <div className="category-select__list" role="listbox">
+          <div className="category-select__list">
             {isLoading ? (
               <p className="category-select__empty">Loading categories...</p>
             ) : shouldShowCreateFromSearch ? (
@@ -359,11 +520,11 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
               <>
                 <section className="category-select__section">
                   <h4>Default Categories</h4>
-                  {renderRows(defaultRows, 'No default categories')}
+                  {renderTreeSection(defaultTree, 'No default categories')}
                 </section>
                 <section className="category-select__section">
                   <h4>Your Categories</h4>
-                  {renderRows(storeRows, 'No store categories')}
+                  {renderTreeSection(storeTree, 'No store categories')}
                 </section>
               </>
             )}
@@ -374,7 +535,8 @@ function CategorySelect({ disabled = false, onChange, storeId, value }) {
             type="button"
             onClick={() => openCreateModal('')}
           >
-            + Add New Category
+            <Plus size={16} aria-hidden="true" />
+            Add New Category
           </button>
         </div>
       ) : null}
