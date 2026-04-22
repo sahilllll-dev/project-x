@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext.jsx'
 import { useStore } from '../context/StoreContext.jsx'
 import { logoutUser } from '../utils/auth.js'
-import { getStoresByUserId } from '../utils/api.js'
+import { getPages, getStoresByUserId } from '../utils/api.js'
 import { getStoreDestination } from '../utils/onboarding.js'
 import { getStoreAvatarStyle, getStoreInitial } from '../utils/storeAvatar.js'
 import appsIcon from '../assets/Dashboard Icons/Apps.svg'
@@ -37,10 +37,14 @@ const storeMenuItems = [
   { label: 'Themes', to: '/themes', icon: themesIcon },
   { label: 'Visual Editor', to: '/dashboard/editor', icon: pagesIcon },
   { label: 'Apps', to: '/apps', icon: appsIcon, badgeKey: 'apps' },
-  { label: 'Pages', to: '/pages', icon: pagesIcon, badge: '6' },
+  { label: 'Pages', to: '/pages', icon: pagesIcon, badgeKey: 'pages' },
 ]
 
 const logoutShortcutKeys = ['b', 'y', 'e']
+
+function getKeyboardKey(event) {
+  return typeof event.key === 'string' ? event.key.toLowerCase() : ''
+}
 
 function isEditableElement(element) {
   return (
@@ -91,6 +95,7 @@ function Sidebar({ isLoading = false }) {
   const { currentStore, setCurrentStore, stores, setStores } = useStore()
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false)
   const [openMenuKey, setOpenMenuKey] = useState('')
+  const [pagesCount, setPagesCount] = useState(0)
   const hasStore = Boolean(currentStore?.name)
   const storeTitle = hasStore ? currentStore.name : 'Create Store'
   const storeInitial = hasStore ? getStoreInitial(currentStore) : 'S'
@@ -119,6 +124,37 @@ function Sidebar({ isLoading = false }) {
   }, [currentUser?.id, isStoreMenuOpen, setStores])
 
   useEffect(() => {
+    let isCancelled = false
+
+    async function loadPagesCount() {
+      if (!currentStore?.id) {
+        setPagesCount(0)
+        return
+      }
+
+      try {
+        const pages = await getPages(currentStore.id)
+
+        if (!isCancelled) {
+          setPagesCount(pages.length)
+        }
+      } catch (error) {
+        console.error(error)
+
+        if (!isCancelled) {
+          setPagesCount(0)
+        }
+      }
+    }
+
+    loadPagesCount()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [currentStore?.id, location.pathname])
+
+  useEffect(() => {
     function handleClickOutside(event) {
       if (!dropdownRef.current?.contains(event.target)) {
         setIsStoreMenuOpen(false)
@@ -142,7 +178,7 @@ function Sidebar({ isLoading = false }) {
         return
       }
 
-      const key = event.key.toLowerCase()
+      const key = getKeyboardKey(event)
 
       if (!logoutShortcutKeys.includes(key)) {
         return
@@ -157,7 +193,11 @@ function Sidebar({ isLoading = false }) {
     }
 
     function handleKeyUp(event) {
-      pressedKeys.delete(event.key.toLowerCase())
+      const key = getKeyboardKey(event)
+
+      if (key) {
+        pressedKeys.delete(key)
+      }
     }
 
     function handleWindowBlur() {
@@ -193,6 +233,18 @@ function Sidebar({ isLoading = false }) {
 
   function isDefaultStore(store) {
     return Boolean(store?.isDefault || store?.id === defaultStoreId)
+  }
+
+  function getSidebarBadge(item) {
+    if (item.badgeKey === 'apps') {
+      return storeApps.length
+    }
+
+    if (item.badgeKey === 'pages') {
+      return pagesCount
+    }
+
+    return item.badge
   }
 
   return (
@@ -396,10 +448,8 @@ function Sidebar({ isLoading = false }) {
                   <img src={item.icon} alt="" />
                 </span>
                 <span>{item.label}</span>
-                {item.badge || item.badgeKey === 'apps' ? (
-                  <span className="sidebar-badge">
-                    {item.badgeKey === 'apps' ? storeApps.length : item.badge}
-                  </span>
+                {item.badge || item.badgeKey ? (
+                  <span className="sidebar-badge">{getSidebarBadge(item)}</span>
                 ) : null}
               </NavLink>
             ))}

@@ -136,6 +136,22 @@ create table if not exists public.store_pages (
 create unique index if not exists store_pages_store_slug_unique
 on public.store_pages (store_id, slug);
 
+create table if not exists public.pages (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores (id) on delete cascade,
+  title text not null,
+  slug text not null,
+  content text not null default '',
+  status text not null default 'draft' check (status in ('draft', 'published')),
+  meta_title text not null default '',
+  meta_description text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists pages_store_slug_unique
+on public.pages (store_id, slug);
+
 create unique index if not exists one_default_store_per_owner
 on public.stores (owner_id)
 where is_default = true;
@@ -170,6 +186,11 @@ create trigger store_pages_handle_updated_at
 before update on public.store_pages
 for each row execute procedure public.handle_updated_at();
 
+drop trigger if exists pages_handle_updated_at on public.pages;
+create trigger pages_handle_updated_at
+before update on public.pages
+for each row execute procedure public.handle_updated_at();
+
 drop trigger if exists orders_handle_updated_at on public.orders;
 create trigger orders_handle_updated_at
 before update on public.orders
@@ -185,6 +206,7 @@ alter table public.stores enable row level security;
 alter table public.products enable row level security;
 alter table public.categories enable row level security;
 alter table public.orders enable row level security;
+alter table public.pages enable row level security;
 
 drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"

@@ -36,7 +36,10 @@ function PagePreview() {
         if (!isCancelled) {
           setPage(null)
         }
-        showToast(error.message || 'Unable to load page preview', 'error')
+
+        if (error.status !== 404) {
+          showToast(error.message || 'Unable to load page preview', 'error')
+        }
       } finally {
         if (!isCancelled) {
           setIsLoading(false)

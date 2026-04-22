@@ -547,7 +547,7 @@ function PageEditor({ mode }) {
             <Button disabled={isSubmitting || !form.title.trim()} fullWidth type="submit">
               {isSubmitting ? 'Saving...' : 'Save Page'}
             </Button>
-            {form.slug ? (
+            {isEditMode && form.slug ? (
               <Button
                 as={Link}
                 fullWidth

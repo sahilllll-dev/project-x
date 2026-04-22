@@ -28,6 +28,10 @@ const routeTitles = [
   { match: /^\/preview\/page\/[^/]+$/, title: 'Page Preview' },
 ]
 
+function getKeyboardKey(event) {
+  return typeof event.key === 'string' ? event.key.toLowerCase() : ''
+}
+
 function getStoreUrlSlug(value) {
   return String(value || '').replace(/\.projectx\.com$/i, '')
 }
@@ -67,8 +71,9 @@ function Header({ onMenuToggle }) {
 
   useEffect(() => {
     function handleKeyDown(event) {
-      const isMacShortcut = event.metaKey && event.key.toLowerCase() === 'k'
-      const isWindowsShortcut = event.ctrlKey && event.key.toLowerCase() === 'k'
+      const key = getKeyboardKey(event)
+      const isMacShortcut = event.metaKey && key === 'k'
+      const isWindowsShortcut = event.ctrlKey && key === 'k'
 
       if (!isMacShortcut && !isWindowsShortcut) {
         return

@@ -1886,7 +1886,7 @@ app.get('/pages/slug/:slug', async (req, res) => {
     if (!slug) return res.status(400).json({ message: 'slug is required' })
 
     const { data, error } = await supabase
-      .from('store_pages')
+      .from('pages')
       .select('*')
       .eq('store_id', storeId)
       .eq('slug', slug)
@@ -1909,7 +1909,7 @@ app.get('/pages/:id', async (req, res) => {
     if (!storeId) return res.status(400).json({ message: 'store_id is required' })
 
     const { data, error } = await supabase
-      .from('store_pages')
+      .from('pages')
       .select('*')
       .eq('id', req.params.id)
       .eq('store_id', storeId)
@@ -1937,7 +1937,7 @@ app.post('/pages', async (req, res) => {
     if (!slug) return res.status(400).json({ message: 'slug is required' })
 
     const { data: existingPage, error: existingError } = await supabase
-      .from('store_pages')
+      .from('pages')
       .select('id')
       .eq('store_id', storeId)
       .eq('slug', slug)
@@ -1947,18 +1947,16 @@ app.post('/pages', async (req, res) => {
     if (existingPage) return res.status(400).json({ message: 'slug must be unique per store' })
 
     const { data, error } = await supabase
-      .from('store_pages')
+      .from('pages')
       .insert([
         {
           store_id: storeId,
-          name: title,
           title,
           slug,
           content: req.body.content ?? '',
           status: normalizePageStatus(req.body.status),
           meta_title: req.body.meta_title ?? req.body.metaTitle ?? '',
           meta_description: req.body.meta_description ?? req.body.metaDescription ?? '',
-          layout: {},
         },
       ])
       .select()
@@ -1989,7 +1987,7 @@ app.put('/pages/:id', async (req, res) => {
     if (!slug) return res.status(400).json({ message: 'slug is required' })
 
     const { data: existingPage, error: existingError } = await supabase
-      .from('store_pages')
+      .from('pages')
       .select('id')
       .eq('store_id', storeId)
       .eq('slug', slug)
@@ -2000,9 +1998,8 @@ app.put('/pages/:id', async (req, res) => {
     if (existingPage) return res.status(400).json({ message: 'slug must be unique per store' })
 
     const { data, error } = await supabase
-      .from('store_pages')
+      .from('pages')
       .update({
-        name: title,
         title,
         slug,
         content: req.body.content ?? '',
@@ -2036,7 +2033,7 @@ app.delete('/pages/:id', async (req, res) => {
     if (!storeId) return res.status(400).json({ message: 'store_id is required' })
 
     const { data, error } = await supabase
-      .from('store_pages')
+      .from('pages')
       .delete()
       .eq('id', req.params.id)
       .eq('store_id', storeId)
