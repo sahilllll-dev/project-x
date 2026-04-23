@@ -21,6 +21,15 @@ function normalizeStore(store) {
     onboardingStep: Number(store.onboardingStep) || 1,
     isOnboardingCompleted: Boolean(store.isOnboardingCompleted),
     isDefault: Boolean(store.isDefault),
+    description: store.description ?? '',
+    email: store.email ?? '',
+    phone: store.phone ?? '',
+    currency: store.currency ?? 'INR',
+    timezone: store.timezone ?? 'Asia/Kolkata',
+    logoUrl: store.logoUrl ?? store.logo_url ?? '',
+    faviconUrl: store.faviconUrl ?? store.favicon_url ?? '',
+    primaryColor: store.primaryColor ?? store.primary_color ?? '#000000',
+    secondaryColor: store.secondaryColor ?? store.secondary_color ?? '#ffffff',
   }
 }
 

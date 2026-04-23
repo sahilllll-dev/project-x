@@ -1,9 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
+import { ENV } from '../config/env.js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = ENV.SUPABASE_URL
+const supabaseAnonKey = ENV.SUPABASE_KEY
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
@@ -29,7 +28,7 @@ function getSupabaseClient() {
 
 function getEmailRedirectUrl() {
   if (typeof window === 'undefined') {
-    return 'http://localhost:5173/login?verified=true'
+    throw new Error('Auth redirect URL is only available in the browser')
   }
 
   return `${window.location.origin}/login?verified=true`

@@ -1,100 +1,150 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001'
-const API_ACTIVITY_EVENT = 'projectx:api-activity'
-let activeRequestCount = 0
+import { API_BASE, apiFetch, subscribeToApiActivity } from '../lib/api.js'
 
-function emitApiActivity() {
-  if (typeof window === 'undefined') {
-    return
+export { API_BASE, apiFetch, subscribeToApiActivity }
+
+const request = apiFetch
+
+function isMissingRouteError(error) {
+  return error?.status === 404
+}
+
+function getDateKey(value) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
   }
 
-  window.dispatchEvent(
-    new CustomEvent(API_ACTIVITY_EVENT, {
-      detail: {
-        activeRequestCount,
-        isLoading: activeRequestCount > 0,
-      },
-    }),
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function buildSalesTrendWindow(days = 7) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (days - 1 - index))
+
+    return {
+      date: getDateKey(date),
+      revenue: 0,
+    }
+  })
+}
+
+function getOrderRevenue(order) {
+  return Number(order?.finalAmount ?? order?.totalAmount ?? 0) || 0
+}
+
+function getOrderQuantity(order) {
+  if (!Array.isArray(order?.products) || order.products.length === 0) {
+    return 0
+  }
+
+  return order.products.reduce((total, product) => total + (Number(product?.quantity) || 1), 0)
+}
+
+function buildLegacyDashboardPayload(products, orders) {
+  const normalizedProducts = Array.isArray(products) ? products : []
+  const normalizedOrders = Array.isArray(orders) ? orders : []
+  const sortedOrders = [...normalizedOrders].sort(
+    (leftOrder, rightOrder) =>
+      new Date(rightOrder?.createdAt ?? 0).getTime() - new Date(leftOrder?.createdAt ?? 0).getTime(),
   )
-}
+  const salesTrend = buildSalesTrendWindow(7)
+  const salesTrendMap = new Map(salesTrend.map((entry) => [entry.date, entry]))
+  const todayKey = getDateKey(new Date())
+  let revenueToday = 0
+  let revenue7Days = 0
+  let totalRevenue = 0
+  let productsSold = 0
+  const topProductsMap = new Map()
 
-function startApiRequest() {
-  activeRequestCount += 1
-  emitApiActivity()
-}
+  for (const order of sortedOrders) {
+    const orderRevenue = getOrderRevenue(order)
+    const orderDateKey = getDateKey(order?.createdAt)
 
-function finishApiRequest() {
-  activeRequestCount = Math.max(0, activeRequestCount - 1)
-  emitApiActivity()
-}
+    totalRevenue += orderRevenue
+    productsSold += getOrderQuantity(order)
 
-export function subscribeToApiActivity(listener) {
-  if (typeof window === 'undefined') {
-    return () => {}
-  }
-
-  function handleApiActivity(event) {
-    listener(event.detail)
-  }
-
-  window.addEventListener(API_ACTIVITY_EVENT, handleApiActivity)
-
-  return () => {
-    window.removeEventListener(API_ACTIVITY_EVENT, handleApiActivity)
-  }
-}
-
-async function request(path, options = {}) {
-  const headers = {
-    ...(options.headers ?? {}),
-  }
-
-  if (options.body) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  startApiRequest()
-
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      headers,
-      ...options,
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      let message = 'Something went wrong'
-
-      if (errorText) {
-        try {
-          const parsedError = JSON.parse(errorText)
-          message = parsedError?.message || parsedError?.error || message
-        } catch {
-          message = errorText.trim().startsWith('<') ? message : errorText
-        }
-      }
-
-      if (response.status === 413) {
-        message = 'Request is too large. Remove large uploaded images and try again.'
-      }
-
-      const error = new Error(message)
-      error.status = response.status
-      throw error
+    if (orderDateKey === todayKey) {
+      revenueToday += orderRevenue
     }
 
-    if (response.status === 204) {
-      return null
+    const trendBucket = salesTrendMap.get(orderDateKey)
+
+    if (trendBucket) {
+      trendBucket.revenue += orderRevenue
+      revenue7Days += orderRevenue
     }
 
-    return response.json()
-  } finally {
-    finishApiRequest()
+    for (const product of order?.products ?? []) {
+      const productKey = String(product?.productId ?? product?.id ?? product?.title ?? '').trim()
+
+      if (!productKey) {
+        continue
+      }
+
+      const currentProduct = topProductsMap.get(productKey) ?? {
+        title: product?.title || 'Untitled product',
+        total_sold: 0,
+      }
+
+      currentProduct.total_sold += Number(product?.quantity) || 1
+      topProductsMap.set(productKey, currentProduct)
+    }
+  }
+
+  const topProducts = [...topProductsMap.values()]
+    .sort((leftProduct, rightProduct) => rightProduct.total_sold - leftProduct.total_sold)
+    .slice(0, 5)
+
+  const lowStock = [...normalizedProducts]
+    .filter((product) => Number(product?.quantity) <= Number(product?.lowStockThreshold ?? 0))
+    .sort((leftProduct, rightProduct) => Number(leftProduct?.quantity) - Number(rightProduct?.quantity))
+    .slice(0, 5)
+    .map((product) => ({
+      id: product?.id ?? '',
+      title: product?.title ?? 'Untitled product',
+      quantity: Number(product?.quantity) || 0,
+    }))
+
+  return {
+    metrics: {
+      revenue_today: revenueToday,
+      revenue_7_days: revenue7Days,
+      total_orders: sortedOrders.length,
+      avg_order_value: sortedOrders.length > 0 ? totalRevenue / sortedOrders.length : 0,
+    },
+    products_sold: productsSold,
+    sales_trend: salesTrend,
+    recent_orders: sortedOrders.slice(0, 5).map((order) => ({
+      id: order?.id ?? '',
+      total_amount: getOrderRevenue(order),
+      payment_method: order?.paymentMethod ?? 'cod',
+    })),
+    top_products: topProducts,
+    low_stock: lowStock,
   }
 }
 
 export function getProducts(storeId) {
   const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
   return request(`/products${query}`)
+}
+
+export async function getStoreHasProducts(storeId) {
+  if (!storeId) {
+    return { hasProducts: false }
+  }
+
+  const products = await getProducts(storeId)
+  return { hasProducts: products.length > 0 }
 }
 
 export function getProductBySlug(slug, storeId) {
@@ -253,6 +303,13 @@ export function updateStore(storeId, data) {
   })
 }
 
+export function updateStoreSettings(storeId, data) {
+  return request(`/stores/${storeId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
 export function getStoreById(storeId) {
   return request(`/stores/detail/${storeId}`)
 }
@@ -374,25 +431,91 @@ export function deletePage(pageId, storeId) {
   })
 }
 
+export async function getDashboard(storeId) {
+  if (!storeId) {
+    return buildLegacyDashboardPayload([], [])
+  }
+
+  const [products, orders] = await Promise.all([getProducts(storeId), getOrders(storeId)])
+  return buildLegacyDashboardPayload(products, orders)
+}
+
 export function getApps() {
   return request('/apps')
 }
 
-export function getStoreApps(storeId) {
-  return request(`/store-apps/${storeId}`)
+export async function getStoreApps(storeId) {
+  if (!storeId) {
+    return []
+  }
+
+  try {
+    return await request(`/store-apps/${encodeURIComponent(storeId)}`)
+  } catch (error) {
+    if (!isMissingRouteError(error)) {
+      throw error
+    }
+
+    const params = new URLSearchParams({ store_id: String(storeId) })
+    return request(`/apps/installed?${params.toString()}`)
+  }
+}
+
+export async function getActiveApps(storeId) {
+  const params = new URLSearchParams({ store_id: String(storeId) })
+
+  try {
+    return await request(`/apps/active?${params.toString()}`)
+  } catch (error) {
+    if (!isMissingRouteError(error)) {
+      throw error
+    }
+
+    const installedApps = await getStoreApps(storeId)
+    return installedApps.filter((storeApp) => storeApp?.enabled)
+  }
 }
 
 export function installStoreApp(storeId, appId) {
-  return request('/store-apps/install', {
+  return request('/apps/install', {
     method: 'POST',
-    body: JSON.stringify({ storeId, appId }),
+    body: JSON.stringify({ store_id: storeId, app_id: appId }),
   })
 }
 
 export function toggleStoreApp(storeId, appId, enabled) {
-  return request('/store-apps/toggle', {
+  return request('/apps/installed', {
+    method: 'PATCH',
+    body: JSON.stringify({ store_id: storeId, app_id: appId, enabled }),
+  })
+}
+
+export function uninstallStoreApp(storeId, appId) {
+  return request('/apps/uninstall', {
     method: 'POST',
-    body: JSON.stringify({ storeId, appId, enabled }),
+    body: JSON.stringify({ store_id: storeId, app_id: appId }),
+  })
+}
+
+export function getStoreAppConfig(storeId, appSlug) {
+  const params = new URLSearchParams({
+    store_id: String(storeId),
+    app_slug: String(appSlug),
+  })
+  return request(`/apps/config?${params.toString()}`)
+}
+
+export function updateStoreAppConfig(storeId, appSlug, config) {
+  return request('/apps/config', {
+    method: 'PATCH',
+    body: JSON.stringify({ store_id: storeId, app_slug: appSlug, config }),
+  })
+}
+
+export function saveWhatsAppApp(storeId, data) {
+  return request('/apps/whatsapp/save', {
+    method: 'POST',
+    body: JSON.stringify({ store_id: storeId, ...data }),
   })
 }
 

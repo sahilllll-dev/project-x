@@ -1,14 +1,13 @@
+const { ENV } = require('./config/env')
+
 const { createClient } = require('@supabase/supabase-js')
 
-const supabaseUrl = process.env.SUPABASE_URL
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
 const isSupabaseAdminConfigured = Boolean(
-  supabaseUrl && supabaseServiceRoleKey,
+  ENV.SUPABASE_URL && ENV.SUPABASE_KEY,
 )
 
 const supabaseAdmin = isSupabaseAdminConfigured
-  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+  ? createClient(ENV.SUPABASE_URL, ENV.SUPABASE_KEY, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,

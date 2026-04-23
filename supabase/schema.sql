@@ -46,7 +46,15 @@ create table if not exists public.stores (
   subdomain text not null unique,
   address1 text not null,
   address2 text,
+  description text not null default '',
+  email text,
+  phone text,
+  currency text not null default 'INR',
+  timezone text not null default 'Asia/Kolkata',
   logo_url text,
+  favicon_url text,
+  primary_color text not null default '#000000',
+  secondary_color text not null default '#ffffff',
   is_default boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -142,6 +150,63 @@ create unique index if not exists one_active_theme_per_store
 on public.store_themes (store_id)
 where is_active = true;
 
+create table if not exists public.apps (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  description text not null default '',
+  icon text not null default '',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.apps (slug, name, description, icon, is_active)
+values
+  ('seo-helper', 'SEO Helper', 'Improve product metadata, search snippets, and storefront SEO.', 'seo-icon', true),
+  ('analytics', 'Analytics', 'Track storefront activity, sales trends, and conversion signals.', 'analytics-icon', true),
+  ('product-labels', 'Product Labels', 'Highlight bestsellers, new arrivals, sale items, and custom badges.', 'labels-icon', true),
+  ('custom-scripts', 'Custom Scripts', 'Add approved tracking snippets and storefront scripts.', 'scripts-icon', true),
+  ('whatsapp-chat', 'WhatsApp Chat', 'Add a floating WhatsApp button with a pre-filled storefront message.', 'whatsapp-icon', true)
+on conflict (slug) do update
+set
+  name = excluded.name,
+  description = excluded.description,
+  icon = excluded.icon,
+  is_active = excluded.is_active,
+  updated_at = now();
+
+create table if not exists public.store_apps (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores (id) on delete cascade,
+  app_id text not null references public.apps (slug) on delete cascade,
+  enabled boolean not null default true,
+  installed_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists store_apps_store_app_unique
+on public.store_apps (store_id, app_id);
+
+create index if not exists store_apps_store_idx
+on public.store_apps (store_id);
+
+create table if not exists public.store_app_configs (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores (id) on delete cascade,
+  app_id uuid not null references public.apps (id) on delete cascade,
+  config jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists store_app_configs_store_app_unique
+on public.store_app_configs (store_id, app_id);
+
+create index if not exists store_app_configs_store_idx
+on public.store_app_configs (store_id);
+
 create table if not exists public.store_pages (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references public.stores (id) on delete cascade,
@@ -225,12 +290,30 @@ create trigger profiles_handle_updated_at
 before update on public.profiles
 for each row execute procedure public.handle_updated_at();
 
+drop trigger if exists apps_handle_updated_at on public.apps;
+create trigger apps_handle_updated_at
+before update on public.apps
+for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists store_apps_handle_updated_at on public.store_apps;
+create trigger store_apps_handle_updated_at
+before update on public.store_apps
+for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists store_app_configs_handle_updated_at on public.store_app_configs;
+create trigger store_app_configs_handle_updated_at
+before update on public.store_app_configs
+for each row execute procedure public.handle_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.stores enable row level security;
 alter table public.products enable row level security;
 alter table public.categories enable row level security;
 alter table public.orders enable row level security;
 alter table public.pages enable row level security;
+alter table public.apps enable row level security;
+alter table public.store_apps enable row level security;
+alter table public.store_app_configs enable row level security;
 
 drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"
@@ -391,3 +474,116 @@ on public.orders
 for update
 using (auth.uid() = owner_id)
 with check (auth.uid() = owner_id);
+
+drop policy if exists "Public can view active apps" on public.apps;
+create policy "Public can view active apps"
+on public.apps
+for select
+using (is_active = true);
+
+drop policy if exists "Users can view store apps" on public.store_apps;
+create policy "Users can view store apps"
+on public.store_apps
+for select
+using (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_apps.store_id
+      and stores.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can install store apps" on public.store_apps;
+create policy "Users can install store apps"
+on public.store_apps
+for insert
+with check (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_apps.store_id
+      and stores.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can update store apps" on public.store_apps;
+create policy "Users can update store apps"
+on public.store_apps
+for update
+using (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_apps.store_id
+      and stores.owner_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_apps.store_id
+      and stores.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can uninstall store apps" on public.store_apps;
+create policy "Users can uninstall store apps"
+on public.store_apps
+for delete
+using (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_apps.store_id
+      and stores.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can view store app configs" on public.store_app_configs;
+create policy "Users can view store app configs"
+on public.store_app_configs
+for select
+using (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_app_configs.store_id
+      and stores.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can create store app configs" on public.store_app_configs;
+create policy "Users can create store app configs"
+on public.store_app_configs
+for insert
+with check (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_app_configs.store_id
+      and stores.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can update store app configs" on public.store_app_configs;
+create policy "Users can update store app configs"
+on public.store_app_configs
+for update
+using (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_app_configs.store_id
+      and stores.owner_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.stores
+    where stores.id = store_app_configs.store_id
+      and stores.owner_id = auth.uid()
+  )
+);

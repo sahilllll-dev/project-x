@@ -1,704 +1,590 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Activity,
+  ArrowUpRight,
+  Boxes,
+  CreditCard,
+  Package,
+  ShoppingCart,
+} from 'lucide-react'
+import DashboardCard from '../components/dashboard/DashboardCard.jsx'
+import SalesTrendChart from '../components/dashboard/SalesTrendChart.jsx'
+import AddProductOnboarding from '../components/onboarding/AddProductOnboarding.jsx'
 import Button from '../components/ui/Button.jsx'
-import SurfaceCard from '../components/ui/SurfaceCard.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
-import { useToast } from '../context/ToastContext.jsx'
-import { checkStoreSlug, getProducts, getStoreById, updateStore } from '../utils/api.js'
+import { getDashboard, getStoreHasProducts } from '../utils/api.js'
 
-const setupSteps = ['Store Settings', 'Add Products', 'Sell Online']
+const EMPTY_DASHBOARD = Object.freeze({
+  metrics: {
+    revenueToday: 0,
+    revenue7Days: 0,
+    totalOrders: 0,
+    avgOrderValue: 0,
+  },
+  productsSold: 0,
+  salesTrend: [],
+  recentOrders: [],
+  topProducts: [],
+  lowStock: [],
+})
 
-function slugifyStoreName(value) {
-  return String(value || '')
-    .toLowerCase()
-    .trim()
-    .replace(/\.projectx\.com$/i, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
+const metricCards = [
+  {
+    key: 'revenueToday',
+    label: 'Revenue Today',
+    icon: ArrowUpRight,
+    accentClassName: 'bg-emerald-500/15 text-emerald-300',
+    type: 'currency',
+  },
+  {
+    key: 'revenue7Days',
+    label: 'Last 7 Days Revenue',
+    icon: Activity,
+    accentClassName: 'bg-sky-500/15 text-sky-300',
+    type: 'currency',
+  },
+  {
+    key: 'totalOrders',
+    label: 'Total Orders',
+    icon: ShoppingCart,
+    accentClassName: 'bg-violet-500/15 text-violet-300',
+    type: 'number',
+  },
+  {
+    key: 'avgOrderValue',
+    label: 'Avg Order Value',
+    icon: CreditCard,
+    accentClassName: 'bg-amber-500/15 text-amber-300',
+    type: 'currency',
+  },
+  {
+    key: 'productsSold',
+    label: 'Products Sold',
+    icon: Boxes,
+    accentClassName: 'bg-rose-500/15 text-rose-300',
+    type: 'number',
+  },
+]
 
-function getStoreUrlSlug(value) {
-  return String(value || '').replace(/\.projectx\.com$/i, '')
-}
-
-function getStoreLink(storeUrl) {
-  if (typeof window === 'undefined' || !storeUrl) {
-    return '#'
-  }
-
-  return `${window.location.origin}/store/${encodeURIComponent(getStoreUrlSlug(storeUrl))}`
-}
-
-function formatCurrency(value) {
+function formatCurrency(value, currency = 'INR', compact = false) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
+    currency,
+    notation: compact ? 'compact' : 'standard',
+    maximumFractionDigits: compact ? 1 : 2,
   }).format(Number(value) || 0)
 }
 
-function formatDate(value) {
-  if (!value) {
-    return '-'
+function formatNumber(value) {
+  return new Intl.NumberFormat('en-IN', {
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0)
+}
+
+function formatMetricValue(value, type, currency) {
+  if (type === 'currency') {
+    return formatCurrency(value, currency, true)
   }
 
-  return new Date(value).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
+  return formatNumber(value)
+}
+
+function formatPaymentMethod(value) {
+  if (!value) {
+    return 'Unknown'
+  }
+
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function normalizeDashboardData(payload) {
+  const metrics = payload?.metrics ?? {}
+
+  return {
+    metrics: {
+      revenueToday: Number(metrics.revenue_today) || 0,
+      revenue7Days: Number(metrics.revenue_7_days) || 0,
+      totalOrders: Number(metrics.total_orders) || 0,
+      avgOrderValue: Number(metrics.avg_order_value) || 0,
+    },
+    productsSold: Number(payload?.products_sold) || 0,
+    salesTrend: Array.isArray(payload?.sales_trend)
+      ? payload.sales_trend.map((entry) => ({
+          date: entry?.date ?? '',
+          revenue: Number(entry?.revenue) || 0,
+        }))
+      : [],
+    recentOrders: Array.isArray(payload?.recent_orders)
+      ? payload.recent_orders.map((order) => ({
+          id: order?.id ?? '',
+          totalAmount: Number(order?.total_amount) || 0,
+          paymentMethod: order?.payment_method ?? '',
+        }))
+      : [],
+    topProducts: Array.isArray(payload?.top_products)
+      ? payload.top_products.map((product) => ({
+          title: product?.title ?? 'Untitled product',
+          totalSold: Number(product?.total_sold) || 0,
+        }))
+      : [],
+    lowStock: Array.isArray(payload?.low_stock)
+      ? payload.low_stock.map((product) => ({
+          id: product?.id ?? '',
+          title: product?.title ?? 'Untitled product',
+          quantity: Number(product?.quantity) || 0,
+        }))
+      : [],
+  }
+}
+
+function LoadingCard() {
+  return (
+    <DashboardCard className="animate-pulse space-y-4">
+      <div className="h-5 w-24 rounded-full bg-white/8" />
+      <div className="h-9 w-28 rounded-full bg-white/10" />
+      <div className="h-4 w-32 rounded-full bg-white/8" />
+    </DashboardCard>
+  )
+}
+
+function EmptyState({ title = 'No data', description = 'Nothing to show yet.' }) {
+  return (
+    <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#0F172A]/55 px-6 text-center">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-slate-200">{title}</p>
+        <p className="text-sm text-slate-400">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+function MetricCard({ accentClassName, icon, label, type, value, currency }) {
+  const IconComponent = icon
+
+  return (
+    <DashboardCard className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-400">{label}</p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
+            {formatMetricValue(value, type, currency)}
+          </p>
+        </div>
+        <span
+          className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${accentClassName}`}
+        >
+          <IconComponent className="h-5 w-5" />
+        </span>
+      </div>
+      <p className="text-xs text-slate-500">Live snapshot from your current store.</p>
+    </DashboardCard>
+  )
+}
+
+function DashboardContent({ currentStore, currentStoreId, currency, storeSwitchVersion }) {
+  const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const loadDashboard = useCallback(
+    async (signal) => {
+      if (!currentStoreId) {
+        setDashboard(EMPTY_DASHBOARD)
+        setIsLoading(false)
+        return
+      }
+
+      setIsLoading(true)
+      setError('')
+
+      try {
+        const payload = await getDashboard(currentStoreId)
+
+        if (!signal.aborted) {
+          setDashboard(normalizeDashboardData(payload))
+        }
+      } catch (fetchError) {
+        if (fetchError.name === 'AbortError' || signal.aborted) {
+          return
+        }
+
+        console.error(fetchError)
+        setDashboard(EMPTY_DASHBOARD)
+        setError(fetchError.message || 'Failed to load dashboard')
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false)
+        }
+      }
+    },
+    [currentStoreId],
+  )
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      loadDashboard(controller.signal)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [loadDashboard, storeSwitchVersion])
+
+  const metricValues = useMemo(
+    () => ({
+      revenueToday: dashboard.metrics.revenueToday,
+      revenue7Days: dashboard.metrics.revenue7Days,
+      totalOrders: dashboard.metrics.totalOrders,
+      avgOrderValue: dashboard.metrics.avgOrderValue,
+      productsSold: dashboard.productsSold,
+    }),
+    [dashboard],
+  )
+
+  return (
+    <div className="mx-auto w-full max-w-[1440px]">
+      <section className="rounded-[28px] border border-white/5 bg-[#0B0F14] p-4 text-slate-100 shadow-[0_30px_90px_rgba(2,6,23,0.42)] sm:p-6 lg:p-8">
+        <div className="mb-6 flex flex-col gap-4 border-b border-white/6 pb-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.24em] text-sky-300/80">
+              Dashboard
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+              {currentStore?.name || 'Store overview'}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-400">
+              Revenue, orders, inventory, and product performance for your current storefront.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
+              Current Currency
+            </p>
+            <p className="mt-2 text-lg font-semibold text-white">{currency}</p>
+          </div>
+        </div>
+
+        {error ? (
+          <DashboardCard className="mb-6 flex flex-col gap-4 border-rose-500/30 bg-rose-500/10 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-rose-200">Dashboard unavailable</p>
+              <p className="mt-1 text-sm text-rose-100/80">{error}</p>
+            </div>
+            <Button
+              className="!bg-rose-500 !text-white hover:!bg-rose-400"
+              onClick={() => {
+                const controller = new AbortController()
+                loadDashboard(controller.signal)
+              }}
+            >
+              Retry
+            </Button>
+          </DashboardCard>
+        ) : null}
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {isLoading
+            ? Array.from({ length: 5 }).map((_, index) => <LoadingCard key={index} />)
+            : metricCards.map((card) => (
+                <MetricCard
+                  accentClassName={card.accentClassName}
+                  currency={currency}
+                  icon={card.icon}
+                  key={card.key}
+                  label={card.label}
+                  type={card.type}
+                  value={metricValues[card.key]}
+                />
+              ))}
+        </div>
+
+        <div className="mt-6">
+          <DashboardCard className="p-0">
+            <div className="flex flex-col gap-2 border-b border-white/6 px-5 py-5 sm:px-6">
+              <p className="text-sm font-medium text-slate-400">Sales Trend</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-2xl font-semibold text-white">
+                    {formatCurrency(dashboard.metrics.revenue7Days, currency)}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Last 7 days revenue, refreshed from your latest orders.
+                  </p>
+                </div>
+                <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  7 day window
+                </span>
+              </div>
+            </div>
+            <div className="px-2 pb-2 pt-4 sm:px-4 sm:pb-4">
+              {isLoading ? (
+                <div className="h-80 animate-pulse rounded-2xl bg-white/[0.04]" />
+              ) : (
+                <SalesTrendChart currency={currency} data={dashboard.salesTrend} />
+              )}
+            </div>
+          </DashboardCard>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+          <DashboardCard className="space-y-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-slate-400">Recent Orders</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Most recent payment events from your store.
+                </p>
+              </div>
+              <ShoppingCart className="h-5 w-5 text-slate-500" />
+            </div>
+
+            {isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    className="h-20 animate-pulse rounded-2xl bg-white/[0.04]"
+                    key={index}
+                  />
+                ))}
+              </div>
+            ) : dashboard.recentOrders.length === 0 ? (
+              <EmptyState
+                description="Your first orders will appear here."
+                title="No data"
+              />
+            ) : (
+              <div className="space-y-3">
+                {dashboard.recentOrders.map((order) => (
+                  <div
+                    className="flex items-center justify-between gap-4 rounded-2xl border border-white/6 bg-[#0F172A] px-4 py-4"
+                    key={order.id}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">
+                        #{order.id}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-400">
+                        {formatPaymentMethod(order.paymentMethod)}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-100">
+                      {formatCurrency(order.totalAmount, currency)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DashboardCard>
+
+          <div className="space-y-4">
+            <DashboardCard className="space-y-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-400">Top Products</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Best-selling catalog items by quantity sold.
+                  </p>
+                </div>
+                <Package className="h-5 w-5 text-slate-500" />
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div
+                      className="h-16 animate-pulse rounded-2xl bg-white/[0.04]"
+                      key={index}
+                    />
+                  ))}
+                </div>
+              ) : dashboard.topProducts.length === 0 ? (
+                <EmptyState
+                  description="Top performers will show after your first sales."
+                  title="No data"
+                />
+              ) : (
+                <div className="space-y-3">
+                  {dashboard.topProducts.map((product, index) => (
+                    <div
+                      className="flex items-center justify-between gap-4 rounded-2xl border border-white/6 bg-[#0F172A] px-4 py-4"
+                      key={`${product.title}-${index}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {product.title}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {formatNumber(product.totalSold)} sold
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-sky-500/12 px-3 py-1 text-xs font-semibold text-sky-300">
+                        {formatNumber(product.totalSold)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DashboardCard>
+
+            <DashboardCard className="space-y-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-400">Low Stock</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Products nearing or below your stock threshold.
+                  </p>
+                </div>
+                <Boxes className="h-5 w-5 text-slate-500" />
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      className="h-16 animate-pulse rounded-2xl bg-white/[0.04]"
+                      key={index}
+                    />
+                  ))}
+                </div>
+              ) : dashboard.lowStock.length === 0 ? (
+                <EmptyState
+                  description="All tracked products are above their low-stock threshold."
+                  title="No low stock products"
+                />
+              ) : (
+                <div className="space-y-3">
+                  {dashboard.lowStock.map((product) => (
+                    <div
+                      className="flex items-center justify-between gap-4 rounded-2xl border border-white/6 bg-[#0F172A] px-4 py-4"
+                      key={product.id}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {product.title}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          Inventory alert
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-amber-500/12 px-3 py-1 text-xs font-semibold text-amber-300">
+                        {formatNumber(product.quantity)} left
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DashboardCard>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function DashboardLoader() {
+  return (
+    <div className="mx-auto w-full max-w-[1440px]">
+      <section className="rounded-[28px] border border-white/5 bg-[#0B0F14] p-4 text-slate-100 shadow-[0_30px_90px_rgba(2,6,23,0.42)] sm:p-6 lg:p-8">
+        <div className="mb-6 space-y-3 border-b border-white/6 pb-6">
+          <div className="h-4 w-28 animate-pulse rounded-full bg-white/[0.08]" />
+          <div className="h-10 w-72 animate-pulse rounded-full bg-white/[0.1]" />
+          <div className="h-5 w-full max-w-xl animate-pulse rounded-full bg-white/[0.08]" />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <LoadingCard key={index} />
+          ))}
+        </div>
+
+        <div className="mt-6 h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
+      </section>
+    </div>
+  )
 }
 
 function Dashboard() {
-  const navigate = useNavigate()
-  const { storeId = '' } = useParams()
-  const { currentUser, currentStore, notifications, setCurrentStore } = useAppContext()
-  const { showToast } = useToast()
-  const [storeName, setStoreName] = useState('')
-  const [storeUrl, setStoreUrl] = useState('')
-  const [isStoreUrlEdited, setIsStoreUrlEdited] = useState(false)
-  const [isUrlAvailable, setIsUrlAvailable] = useState(null)
-  const [storeUrlError, setStoreUrlError] = useState('')
-  const [isFormValid, setIsFormValid] = useState(false)
-  const [logoPreview, setLogoPreview] = useState('')
-  const [isStoreCreated, setIsStoreCreated] = useState(false)
-  const [hasProducts, setHasProducts] = useState(false)
-  const [lowStockProducts, setLowStockProducts] = useState([])
-  const [activeStep, setActiveStep] = useState('store-settings')
-  const [createdStoreUrl, setCreatedStoreUrl] = useState('')
-  const [initialStoreFormSnapshot, setInitialStoreFormSnapshot] = useState('')
-  const [formStoreId, setFormStoreId] = useState(null)
-  const [isHydratingStore, setIsHydratingStore] = useState(Boolean(storeId))
-  const lastTakenUrlToastRef = useRef('')
-  const lowStockToastRef = useRef(new Set())
-  const storeLink = getStoreLink(createdStoreUrl || storeUrl)
-  const storeSlug = getStoreUrlSlug(storeUrl)
-  const storeFormSnapshot = JSON.stringify({
-    name: storeName.trim(),
-    url: storeUrl.trim().toLowerCase(),
-  })
-  const hasStoreFormChanges = storeFormSnapshot !== initialStoreFormSnapshot
-  const recentOrders = notifications.slice(0, 5)
+  const { currentStore, isStoreReady, storeSwitchVersion } = useAppContext()
+  const [hasProducts, setHasProducts] = useState(null)
+  const [isCheckingProducts, setIsCheckingProducts] = useState(true)
+  const [gateError, setGateError] = useState('')
+  const currentStoreId = currentStore?.id ?? ''
+  const currency = currentStore?.currency ?? 'INR'
 
-  useEffect(() => {
-    async function hydrateStore() {
-      if (!storeId) {
-        setIsHydratingStore(false)
-        return
-      }
-
-      if (currentStore?.id === storeId) {
-        setIsHydratingStore(false)
-        return
-      }
-
-      setIsHydratingStore(true)
-
-      try {
-        const nextStore = await getStoreById(storeId)
-        setCurrentStore(nextStore)
-      } catch (error) {
-        console.error(error)
-        showToast('Store not found', 'error')
-        navigate('/stores', { replace: true })
-      } finally {
-        setIsHydratingStore(false)
-      }
-    }
-
-    hydrateStore()
-  }, [currentStore?.id, navigate, setCurrentStore, showToast, storeId])
-
-  useEffect(() => {
-    const latestStore = currentStore
-
-    if (!latestStore) {
-      setStoreName('')
-      setStoreUrl('')
-      setIsStoreUrlEdited(false)
-      setIsUrlAvailable(null)
-      setStoreUrlError('')
-      setIsFormValid(false)
-      setIsStoreCreated(false)
+  const checkHasProducts = useCallback(async () => {
+    if (!currentStoreId) {
       setHasProducts(false)
-      setLowStockProducts([])
-      setCreatedStoreUrl('')
-      setInitialStoreFormSnapshot('')
-      setFormStoreId(null)
-      setActiveStep('store-settings')
+      setIsCheckingProducts(false)
       return
     }
 
-    const nextStoreName = latestStore.name ?? ''
-    const nextStoreUrl = latestStore.url ?? ''
-    setStoreName(nextStoreName)
-    setStoreUrl(nextStoreUrl)
-    setIsStoreUrlEdited(true)
-    setIsStoreCreated(true)
-    setIsUrlAvailable(true)
-    setIsFormValid(true)
-    setCreatedStoreUrl(latestStore.url ?? '')
-    setFormStoreId(latestStore.id)
-    setInitialStoreFormSnapshot(
-      JSON.stringify({
-        name: nextStoreName.trim(),
-        url: nextStoreUrl.trim().toLowerCase(),
-      }),
-    )
-    const resolvedStep = Number(latestStore.onboardingStep) || 1
-
-    if (resolvedStep >= 3 || hasProducts) {
-      setActiveStep('sell-online')
-      return
-    }
-
-    if (resolvedStep >= 2) {
-      setActiveStep('add-products')
-      return
-    }
-
-    setActiveStep('store-settings')
-  }, [currentStore, hasProducts])
-
-  useEffect(() => {
-    async function loadProducts() {
-      if (!currentStore?.id) {
-        setHasProducts(false)
-        setLowStockProducts([])
-        return
-      }
-
-      try {
-        const products = await getProducts(currentStore.id)
-        const nextHasProducts = products.length > 0
-        const nextLowStockProducts = products.filter(
-          (product) =>
-            Number(product.quantity) <= Number(product.lowStockThreshold ?? 5),
-        )
-        setHasProducts(nextHasProducts)
-        setLowStockProducts(nextLowStockProducts)
-
-        nextLowStockProducts.forEach((product) => {
-          const alertKey = `${currentStore.id}:${product.id}:${product.quantity}`
-
-          if (!lowStockToastRef.current.has(alertKey)) {
-            showToast(`Low stock alert for ${product.title}`, 'info')
-            lowStockToastRef.current.add(alertKey)
-          }
-        })
-
-        if (nextHasProducts && Number(currentStore.onboardingStep) < 3) {
-          const nextStore = await updateStore(currentStore.id, { onboardingStep: 3 })
-          setCurrentStore(nextStore)
-        }
-      } catch (error) {
-        console.error(error)
-        setHasProducts(false)
-        setLowStockProducts([])
-      }
-    }
-
-    loadProducts()
-    const intervalId = window.setInterval(loadProducts, 15000)
-
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [currentStore, setCurrentStore, showToast])
-
-  useEffect(() => {
-    if (activeStep !== 'store-settings') {
-      return
-    }
-
-    if (currentStore?.id && String(formStoreId) !== String(currentStore.id)) {
-      return
-    }
-
-    if (!storeUrl.trim()) {
-      setIsUrlAvailable(null)
-      setStoreUrlError('')
-      return
-    }
-
-    async function checkStoreAvailability() {
-      try {
-        const slug = (getStoreUrlSlug(storeUrl) || '').toLowerCase().trim()
-
-        if (!slug) {
-          setIsUrlAvailable(false)
-          setStoreUrlError('Slug is required')
-          return
-        }
-
-        if (
-          currentStore?.id &&
-          slug === (getStoreUrlSlug(currentStore.url ?? '') || '').toLowerCase().trim()
-        ) {
-          setIsUrlAvailable(true)
-          setStoreUrlError('')
-          return
-        }
-
-        const response = await checkStoreSlug(slug, currentStore?.id)
-        setIsUrlAvailable(response.available)
-        setStoreUrlError(response.available ? '' : 'Store Temporary URL already used')
-
-        if (!response.available && lastTakenUrlToastRef.current !== slug) {
-          showToast('Store Temporary URL already used', 'error')
-          lastTakenUrlToastRef.current = slug
-        }
-        if (response.available && lastTakenUrlToastRef.current === slug) {
-          lastTakenUrlToastRef.current = ''
-        }
-      } catch (error) {
-        console.error(error)
-        setIsUrlAvailable(false)
-        setStoreUrlError('Unable to verify URL')
-        showToast(error.message || 'Something went wrong', 'error')
-      }
-    }
-
-    const debounceTimerId = window.setTimeout(checkStoreAvailability, 300)
-
-    return () => {
-      window.clearTimeout(debounceTimerId)
-    }
-  }, [activeStep, currentStore, formStoreId, showToast, storeUrl])
-
-  useEffect(() => {
-    setIsFormValid(
-      storeName.trim() !== '' &&
-        storeUrl.trim() !== '' &&
-        isUrlAvailable === true,
-    )
-  }, [isUrlAvailable, storeName, storeUrl])
-
-  useEffect(() => {
-    return () => {
-      if (logoPreview) {
-        URL.revokeObjectURL(logoPreview)
-      }
-    }
-  }, [logoPreview])
-
-  function handleLogoChange(event) {
-    const file = event.target.files?.[0]
-
-    if (logoPreview) {
-      URL.revokeObjectURL(logoPreview)
-    }
-
-    if (!file) {
-      setLogoPreview('')
-      return
-    }
-
-    setLogoPreview(URL.createObjectURL(file))
-  }
-
-  function handleStoreNameChange(event) {
-    const nextStoreName = event.target.value
-    setStoreName(nextStoreName)
-
-    if (!isStoreUrlEdited) {
-      const nextSlug = slugifyStoreName(nextStoreName)
-      setStoreUrl(nextSlug ? `${nextSlug}.projectx.com` : '')
-    }
-  }
-
-  function handleStoreUrlChange(event) {
-    const nextSlug = slugifyStoreName(event.target.value)
-    setIsStoreUrlEdited(true)
-    setStoreUrl(nextSlug ? `${nextSlug}.projectx.com` : '')
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
-
-    const name = storeName.trim()
-    const slug = getStoreUrlSlug(storeUrl).trim().toLowerCase()
-
-    if (!name || !slug) {
-      showToast('Please fill all required fields', 'error')
-      return
-    }
-
-    if (!isFormValid || !currentUser?.id || !currentStore?.id || !hasStoreFormChanges) {
-      return
-    }
+    setIsCheckingProducts(true)
+    setGateError('')
 
     try {
-      setStoreUrlError('')
-      const storePayload = {
-        name,
-        slug,
-        subdomain: slug,
-        url: `${slug}.projectx.com`,
-        ownerEmail: currentUser.email ?? '',
-        onboardingStep: 2,
-      }
-      const nextStore = await updateStore(currentStore.id, storePayload)
-
-      setCurrentStore(nextStore)
-      setIsStoreCreated(true)
-      setHasProducts(false)
-      showToast('Store updated successfully', 'success')
-      setCreatedStoreUrl(nextStore.url)
-      setInitialStoreFormSnapshot(
-        JSON.stringify({
-          name: nextStore.name.trim(),
-          url: nextStore.url.trim().toLowerCase(),
-        }),
-      )
-      setActiveStep('add-products')
+      const response = await getStoreHasProducts(currentStoreId)
+      setHasProducts(Boolean(response?.hasProducts))
     } catch (error) {
       console.error(error)
-      const message = error.message || 'Something went wrong'
-
-      if (message === 'Store Temporary URL already used') {
-        setIsUrlAvailable(false)
-        setStoreUrlError(message)
-      }
-
-      showToast(message, 'error')
+      setHasProducts(null)
+      setGateError(error.message || 'Failed to verify store products')
+    } finally {
+      setIsCheckingProducts(false)
     }
-  }
+  }, [currentStoreId])
 
-  async function updateOnboardingStep(nextStep) {
-    if (!currentStore?.id) {
-      return null
-    }
-
-    try {
-      const nextStore = await updateStore(currentStore.id, { onboardingStep: nextStep })
-      setCurrentStore(nextStore)
-      return nextStore
-    } catch (error) {
-      console.error(error)
-      showToast(error.message || 'Something went wrong', 'error')
-      return null
-    }
-  }
-
-  async function handleAddProductStep() {
-    await updateOnboardingStep(3)
-    navigate('/products/new')
-  }
-
-  async function handleSellOnlineStep() {
-    if (!currentStore?.id) {
+  useEffect(() => {
+    if (!isStoreReady) {
       return
     }
 
-    try {
-      const nextStore = await updateStore(currentStore.id, {
-        onboardingStep: 4,
-        isOnboardingCompleted: true,
-      })
-      setCurrentStore(nextStore)
-      navigate('/dashboard')
-    } catch (error) {
-      console.error(error)
-      showToast(error.message || 'Something went wrong', 'error')
+    const timeoutId = window.setTimeout(() => {
+      checkHasProducts()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
     }
+  }, [checkHasProducts, isStoreReady, storeSwitchVersion])
+
+  if (!isStoreReady || isCheckingProducts) {
+    return <DashboardLoader />
   }
 
-  if (isHydratingStore) {
-    return <p className="product-empty-state">Loading store...</p>
-  }
-
-  if (!currentStore?.id) {
+  if (gateError) {
     return (
-      <div className="dashboard">
-        <div className="dashboard-intro">
-          <h2>No store selected</h2>
-          <p>Select an existing store or create a new one to continue onboarding.</p>
-        </div>
-        <SurfaceCard className="form-card">
-          <Button onClick={() => navigate('/stores')} variant="outline">
-            View Stores
+      <div className="mx-auto w-full max-w-[960px]">
+        <DashboardCard className="flex flex-col gap-4 border-rose-500/30 bg-rose-500/10 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-rose-200">Dashboard unavailable</p>
+            <p className="mt-1 text-sm text-rose-100/80">{gateError}</p>
+          </div>
+          <Button
+            className="!bg-rose-500 !text-white hover:!bg-rose-400"
+            onClick={checkHasProducts}
+          >
+            Retry
           </Button>
-          <Button onClick={() => navigate('/onboarding')}>
-            Create New Store
-          </Button>
-        </SurfaceCard>
+        </DashboardCard>
       </div>
     )
+  }
+
+  if (!hasProducts) {
+    return <AddProductOnboarding />
   }
 
   return (
-    <>
-      <div className="dashboard">
-        <div className="dashboard-intro">
-          <h2>Get ready to sell</h2>
-          <p>Here&apos;s a guide to get started. As your business grows, you&apos;ll get fresh tips and insights here.</p>
-        </div>
-
-        <section className="setup-guide">
-          <div className="setup-guide__heading">
-            <h3>Setup guide</h3>
-            <span className="setup-guide__status">
-              {`${Number(isStoreCreated) + Number(hasProducts)}/4 Completed`}
-            </span>
-          </div>
-
-          <div className="setup-guide__card">
-            <div className="setup-guide__steps">
-              <ul className="setup-list">
-                {setupSteps.map((step, index) => {
-                  const isStoreSettingsStep = index === 0
-                  const isAddProductsStep = index === 1
-                  const isCompleted =
-                    (isStoreCreated && isStoreSettingsStep) ||
-                    (hasProducts && isAddProductsStep)
-                  const isActive =
-                    (!isStoreCreated && isStoreSettingsStep) ||
-                    (isStoreCreated && !hasProducts && isAddProductsStep)
-                  const isClickable =
-                    (isStoreCreated && isStoreSettingsStep) ||
-                    (hasProducts && isAddProductsStep)
-
-                  return (
-                    <li
-                      key={step}
-                      className={`setup-list__item${isActive ? ' is-active' : ''}${isCompleted ? ' is-completed' : ''}${isClickable ? ' is-clickable' : ''}`}
-                    >
-                      <span className="setup-list__icon" aria-hidden="true">
-                        {isCompleted ? '✓' : ''}
-                      </span>
-                      {isClickable ? (
-                        <button
-                          className="setup-step-button"
-                          type="button"
-                          onClick={() => {
-                            if (isStoreSettingsStep) {
-                              setActiveStep('store-settings')
-                              return
-                            }
-
-                            if (isAddProductsStep) {
-                              updateOnboardingStep(3)
-                              navigate('/products')
-                            }
-                          }}
-                        >
-                          {step}
-                        </button>
-                      ) : (
-                        <span>{step}</span>
-                      )}
-                      {isStoreSettingsStep && isClickable && createdStoreUrl ? (
-                        <a
-                          className="setup-step-link"
-                          href={storeLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`Open ${storeLink}`}
-                          title={storeLink}
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              d="M10 14 21 3m0 0h-7m7 0v7"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="1.75"
-                            />
-                            <path
-                              d="M21 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="1.75"
-                            />
-                          </svg>
-                        </a>
-                      ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-
-            <section className="right-panel">
-              {isStoreCreated && activeStep !== 'store-settings' ? (
-                <div className="setup-product-panel">
-                  <div className="setup-product-card">
-                    <h3>Add your first product</h3>
-                    <p>
-                      Write a description, add photos, and set pricing for the products you plan
-                      to sell.
-                    </p>
-                    <Button
-                      className="setup-product-card__button"
-                      onClick={handleAddProductStep}
-                    >
-                      Add Product
-                    </Button>
-                    <div className="setup-product-card__import">
-                      <span>Or import from</span>
-                      <span className="setup-product-card__shopify" aria-label="Shopify">
-                        S
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    className="setup-product-digital"
-                    type="button"
-                    onClick={handleAddProductStep}
-                  >
-                    Add your first digital product
-                  </button>
-                  <button
-                    className="setup-product-digital"
-                    type="button"
-                    onClick={handleSellOnlineStep}
-                  >
-                    Continue to sell online
-                  </button>
-                </div>
-              ) : (
-                <SurfaceCard as="form" className="form-card" onSubmit={handleSubmit}>
-                  <div className="upload-field">
-                    <label htmlFor="store-logo">Store Logo</label>
-                    <label className="upload-box" htmlFor="store-logo">
-                      {logoPreview ? (
-                        <img src={logoPreview} alt="Store logo preview" className="upload-preview" />
-                      ) : (
-                        <span>
-                          <strong>Click to upload</strong> or drag and drop
-                          <small>SVG, PNG, JPG or GIF (Max 200KB)</small>
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      id="store-logo"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoChange}
-                      hidden
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label htmlFor="store-name">Store Name*</label>
-                    <input
-                      id="store-name"
-                      type="text"
-                      value={storeName}
-                      onChange={handleStoreNameChange}
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label htmlFor="store-url">Store Temporary URL*</label>
-                    <div className="url-input-group">
-                      <div className="url-display">
-                        <input
-                        id="store-url"
-                          className="url-display__input"
-                          type="text"
-                          value={storeSlug}
-                          onChange={handleStoreUrlChange}
-                          placeholder="store"
-                          aria-label="Store temporary URL"
-                        />
-                        <span className="url-display__suffix">.projectx.com</span>
-                      </div>
-                      {isUrlAvailable === true ? (
-                        <span className="status-icon status-icon--success" aria-label="URL available">
-                          ✓
-                        </span>
-                      ) : null}
-                      {isUrlAvailable === false ? (
-                        <span className="status-icon status-icon--error" aria-label="URL unavailable">
-                          ✕
-                        </span>
-                      ) : null}
-                    </div>
-                    {isUrlAvailable === false ? (
-                      <p className="error-text">{storeUrlError || 'This URL is not available'}</p>
-                    ) : null}
-                  </div>
-
-                  <Button
-                    className="dashboard-create-button"
-                    disabled={!isFormValid || !hasStoreFormChanges}
-                    fullWidth
-                    type="submit"
-                  >
-                    Update Store
-                  </Button>
-                </SurfaceCard>
-              )}
-            </section>
-          </div>
-        </section>
-
-        <section className="recent-orders-panel" aria-labelledby="recent-orders-heading">
-          <div className="recent-orders-panel__header">
-            <div>
-              <h3 id="recent-orders-heading">Recent Orders</h3>
-              <p>Latest orders received for this store.</p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/orders')}>
-              View all
-            </Button>
-          </div>
-
-          {recentOrders.length > 0 ? (
-            <div className="recent-orders-list">
-              {recentOrders.map((order) => (
-                <button
-                  className="recent-orders-list__item"
-                  key={order.id}
-                  type="button"
-                  onClick={() => navigate(`/orders/${order.id}`)}
-                >
-                  <span>
-                    <strong>#{order.id}</strong>
-                    <small>{order.customerName || 'Guest customer'}</small>
-                  </span>
-                  <span>
-                    <strong>{formatCurrency(order.finalAmount ?? order.totalAmount)}</strong>
-                    <small>{formatDate(order.createdAt)}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="recent-orders-panel__empty">No recent orders yet.</p>
-          )}
-        </section>
-
-        <section className="low-stock-panel" aria-labelledby="low-stock-heading">
-          <div className="low-stock-panel__header">
-            <div>
-              <h3 id="low-stock-heading">Low Stock Products</h3>
-              <p>Products at or below their alert threshold.</p>
-            </div>
-            <span>{lowStockProducts.length}</span>
-          </div>
-
-          {lowStockProducts.length > 0 ? (
-            <div className="low-stock-list">
-              {lowStockProducts.map((product) => (
-                <div className="low-stock-list__item" key={product.id}>
-                  <strong>{product.title}</strong>
-                  <span>{Number(product.quantity) || 0} remaining</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="low-stock-panel__empty">No low stock products right now.</p>
-          )}
-        </section>
-      </div>
-    </>
+    <DashboardContent
+      currency={currency}
+      currentStore={currentStore}
+      currentStoreId={currentStoreId}
+      storeSwitchVersion={storeSwitchVersion}
+    />
   )
 }
 

@@ -24,6 +24,19 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message: 'Use apiFetch instead of fetch',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/lib/api.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 ])

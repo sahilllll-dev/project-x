@@ -36,7 +36,7 @@ const mainMenuItems = [
 const storeMenuItems = [
   { label: 'Themes', to: '/themes', icon: themesIcon },
   { label: 'Visual Editor', to: '/dashboard/editor', icon: pagesIcon },
-  { label: 'Apps', to: '/apps', icon: appsIcon, badgeKey: 'apps' },
+  { label: 'Apps', icon: appsIcon, type: 'apps', badgeKey: 'apps' },
   { label: 'Pages', to: '/pages', icon: pagesIcon, badgeKey: 'pages' },
 ]
 
@@ -87,14 +87,35 @@ function SidebarSkeleton() {
   )
 }
 
-function Sidebar({ isLoading = false }) {
+function SidebarIcon({ icon }) {
+  if (typeof icon === 'string') {
+    return <img src={icon} alt="" />
+  }
+
+  const Icon = icon
+  return <Icon size={19} strokeWidth={2} aria-hidden="true" />
+}
+
+function StoreAvatar({ className, store, fallback = 'S' }) {
+  const faviconUrl = store?.faviconUrl ?? store?.favicon_url ?? ''
+
+  return (
+    <span className={className} style={faviconUrl ? undefined : getStoreAvatarStyle(store)}>
+      {faviconUrl ? <img src={faviconUrl} alt="" /> : fallback}
+    </span>
+  )
+}
+
+function Sidebar({ isLoading = false, onOpenGlobalSearch }) {
   const navigate = useNavigate()
   const location = useLocation()
   const dropdownRef = useRef(null)
-  const { currentUser, defaultStoreId, storeApps, clearAppContext } = useAppContext()
+  const { currentUser, defaultStoreId, storeApps, refreshStoreApps, clearAppContext } =
+    useAppContext()
   const { currentStore, setCurrentStore, stores, setStores } = useStore()
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false)
   const [openMenuKey, setOpenMenuKey] = useState('')
+  const [isAppsLoading, setIsAppsLoading] = useState(false)
   const [pagesCount, setPagesCount] = useState(0)
   const hasStore = Boolean(currentStore?.name)
   const storeTitle = hasStore ? currentStore.name : 'Create Store'
@@ -103,6 +124,11 @@ function Sidebar({ isLoading = false }) {
     item.children?.some((child) => child.to === location.pathname),
   )?.label
   const expandedMenuKey = openMenuKey || activeDropdownKey
+  const isAppsActive =
+    location.pathname.startsWith('/admin/apps/') ||
+    location.pathname.startsWith('/admin/settings/apps') ||
+    location.pathname.startsWith('/settings/apps')
+  const isAppsDropdownOpen = openMenuKey === 'Apps'
 
   useEffect(() => {
     async function loadStores() {
@@ -231,6 +257,34 @@ function Sidebar({ isLoading = false }) {
     navigate(getStoreDestination(store))
   }
 
+  async function handleAppsDropdownToggle() {
+    const shouldOpen = !isAppsDropdownOpen
+    setOpenMenuKey(shouldOpen ? 'Apps' : '')
+
+    if (!shouldOpen) {
+      return
+    }
+
+    setIsAppsLoading(true)
+
+    try {
+      await refreshStoreApps()
+    } finally {
+      setIsAppsLoading(false)
+    }
+  }
+
+  function handleInstalledAppClick(storeApp) {
+    const appSlug = storeApp.app?.slug ?? storeApp.appId
+
+    if (!appSlug) {
+      return
+    }
+
+    setOpenMenuKey('')
+    navigate(`/admin/apps/${appSlug}`)
+  }
+
   function isDefaultStore(store) {
     return Boolean(store?.isDefault || store?.id === defaultStoreId)
   }
@@ -259,9 +313,7 @@ function Sidebar({ isLoading = false }) {
             type="button"
             onClick={handleStoreMenuToggle}
           >
-            <div className="sidebar-logo" style={getStoreAvatarStyle(currentStore)}>
-              {storeInitial}
-            </div>
+            <StoreAvatar className="sidebar-logo" fallback={storeInitial} store={currentStore} />
             <div className="sidebar-store__copy">
               <p className="sidebar-store__name">{storeTitle}</p>
             </div>
@@ -281,12 +333,11 @@ function Sidebar({ isLoading = false }) {
                     type="button"
                     onClick={() => handleStoreSelect(currentStore)}
                   >
-                    <span
+                    <StoreAvatar
                       className="sidebar-store-option__avatar"
-                      style={getStoreAvatarStyle(currentStore)}
-                    >
-                      {getStoreInitial(currentStore)}
-                    </span>
+                      fallback={getStoreInitial(currentStore)}
+                      store={currentStore}
+                    />
                     <span>{currentStore.name}</span>
                     {isDefaultStore(currentStore) ? (
                       <span className="sidebar-store-option__badge">default</span>
@@ -306,12 +357,11 @@ function Sidebar({ isLoading = false }) {
                         key={store.id}
                         onClick={() => handleStoreSelect(store)}
                       >
-                        <span
+                        <StoreAvatar
                           className="sidebar-store-option__avatar"
-                          style={getStoreAvatarStyle(store)}
-                        >
-                          {getStoreInitial(store)}
-                        </span>
+                          fallback={getStoreInitial(store)}
+                          store={store}
+                        />
                         <span>{store.name}</span>
                         {isDefault ? (
                           <span className="sidebar-store-option__badge">default</span>
@@ -386,7 +436,7 @@ function Sidebar({ isLoading = false }) {
                       }
                     >
                       <span className="sidebar-link__icon" aria-hidden="true">
-                        <img src={item.icon} alt="" />
+                        <SidebarIcon icon={item.icon} />
                       </span>
                       <span>{item.label}</span>
                       <span className="sidebar-link__chevron" aria-hidden="true">
@@ -424,7 +474,7 @@ function Sidebar({ isLoading = false }) {
                   }
                 >
                   <span className="sidebar-link__icon" aria-hidden="true">
-                    <img src={item.icon} alt="" />
+                    <SidebarIcon icon={item.icon} />
                   </span>
                   <span>{item.label}</span>
                 </NavLink>
@@ -436,23 +486,85 @@ function Sidebar({ isLoading = false }) {
         <div className="sidebar-section">
           <p className="sidebar-section__title">Store</p>
           <nav className="sidebar-nav" aria-label="Store menu">
-            {storeMenuItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                }
-              >
-                <span className="sidebar-link__icon" aria-hidden="true">
-                  <img src={item.icon} alt="" />
-                </span>
-                <span>{item.label}</span>
-                {item.badge || item.badgeKey ? (
-                  <span className="sidebar-badge">{getSidebarBadge(item)}</span>
-                ) : null}
-              </NavLink>
-            ))}
+            {storeMenuItems.map((item) => {
+              if (item.type === 'apps') {
+                return (
+                  <div className="sidebar-dropdown" key={item.label}>
+                    <div className="sidebar-apps-menu">
+                      <button
+                        className={`sidebar-link sidebar-link--button sidebar-apps-menu__main${
+                          isAppsActive ? ' sidebar-link--active' : ''
+                        }`}
+                        type="button"
+                        onClick={() => onOpenGlobalSearch?.('apps')}
+                      >
+                        <span className="sidebar-link__icon" aria-hidden="true">
+                          <SidebarIcon icon={item.icon} />
+                        </span>
+                        <span>{item.label}</span>
+                        {item.badge || item.badgeKey ? (
+                          <span className="sidebar-badge">{getSidebarBadge(item)}</span>
+                        ) : null}
+                      </button>
+                      <button
+                        className={`sidebar-apps-menu__toggle${
+                          isAppsDropdownOpen ? ' sidebar-apps-menu__toggle--open' : ''
+                        }`}
+                        type="button"
+                        aria-label={isAppsDropdownOpen ? 'Collapse apps' : 'Expand apps'}
+                        aria-expanded={isAppsDropdownOpen}
+                        onClick={handleAppsDropdownToggle}
+                      >
+                        {isAppsDropdownOpen ? '⌃' : '⌄'}
+                      </button>
+                    </div>
+
+                    {isAppsDropdownOpen ? (
+                      <div className="sidebar-subnav sidebar-subnav--apps">
+                        {isAppsLoading ? (
+                          <span className="sidebar-subnav__empty">Loading apps...</span>
+                        ) : null}
+
+                        {!isAppsLoading && storeApps.length === 0 ? (
+                          <span className="sidebar-subnav__empty">No installed apps</span>
+                        ) : null}
+
+                        {!isAppsLoading
+                          ? storeApps.map((storeApp) => (
+                              <button
+                                className="sidebar-subnav__link sidebar-subnav__link--button"
+                                key={storeApp.id}
+                                type="button"
+                                onClick={() => handleInstalledAppClick(storeApp)}
+                              >
+                                <span>{storeApp.app?.name ?? storeApp.appId}</span>
+                              </button>
+                            ))
+                          : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              }
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                  }
+                >
+                  <span className="sidebar-link__icon" aria-hidden="true">
+                    <SidebarIcon icon={item.icon} />
+                  </span>
+                  <span>{item.label}</span>
+                  {item.badge || item.badgeKey ? (
+                    <span className="sidebar-badge">{getSidebarBadge(item)}</span>
+                  ) : null}
+                </NavLink>
+              )
+            })}
           </nav>
         </div>
       </div>

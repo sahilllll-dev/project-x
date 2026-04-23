@@ -18,9 +18,12 @@ const routeTitles = [
   { match: /^\/customers$/, title: 'Customers' },
   { match: /^\/customers\/[^/]+$/, title: 'Customer Details' },
   { match: /^\/payments$/, title: 'Payments' },
+  { match: /^\/admin\/settings(\/.*)?$/, title: 'Store Settings' },
+  { match: /^\/settings(\/.*)?$/, title: 'Store Settings' },
   { match: /^\/themes$/, title: 'Themes' },
   { match: /^\/dashboard\/editor$/, title: 'Visual Editor' },
   { match: /^\/dashboard\/coupons$/, title: 'Coupons' },
+  { match: /^\/admin\/apps\/[^/]+$/, title: 'App' },
   { match: /^\/apps$/, title: 'Apps' },
   { match: /^\/pages$/, title: 'Pages' },
   { match: /^\/pages\/create$/, title: 'Create Page' },
@@ -49,10 +52,9 @@ function formatNotificationDate(value) {
   })
 }
 
-function Header({ onMenuToggle }) {
+function Header({ onMenuToggle, onOpenGlobalSearch }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const searchInputRef = useRef(null)
   const notificationMenuRef = useRef(null)
   const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false)
   const {
@@ -80,7 +82,7 @@ function Header({ onMenuToggle }) {
       }
 
       event.preventDefault()
-      searchInputRef.current?.focus()
+      onOpenGlobalSearch?.('products')
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -88,7 +90,7 @@ function Header({ onMenuToggle }) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  }, [onOpenGlobalSearch])
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -142,7 +144,18 @@ function Header({ onMenuToggle }) {
         <h1>{currentTitle}</h1>
       </div>
 
-      <div className="app-header__search">
+      <div
+        className="app-header__search"
+        role="button"
+        tabIndex="0"
+        onClick={() => onOpenGlobalSearch?.('products')}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onOpenGlobalSearch?.('products')
+          }
+        }}
+      >
         <span className="app-header__search-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <circle
@@ -162,23 +175,16 @@ function Header({ onMenuToggle }) {
             />
           </svg>
         </span>
-        <input
-          ref={searchInputRef}
-          type="search"
-          placeholder="Search"
-          aria-label="Search"
-        />
-        <button
+        <span className="app-header__search-placeholder">Search</span>
+        <span
           className="app-header__shortcut"
-          type="button"
-          onClick={() => searchInputRef.current?.focus()}
-          aria-label="Focus search using Command or Control K"
+          aria-hidden="true"
         >
           <span className="app-header__shortcut-key">
             {isMacPlatform ? '⌘' : 'Ctrl'}
           </span>
           <span className="app-header__shortcut-key">K</span>
-        </button>
+        </span>
       </div>
 
       <div className="app-header__actions">
@@ -227,7 +233,12 @@ function Header({ onMenuToggle }) {
           Logout
         </Button>
 
-        <IconButton className="header-icon-button" aria-label="Settings" title="Settings">
+        <IconButton
+          className={`header-icon-button${location.pathname.startsWith('/admin/settings') || location.pathname.startsWith('/settings') ? ' header-icon-button--active' : ''}`}
+          aria-label="Settings"
+          title="Settings"
+          onClick={() => navigate('/admin/settings')}
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle
               cx="12"

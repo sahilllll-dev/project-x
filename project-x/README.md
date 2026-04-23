@@ -14,3 +14,19 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Environment Setup
+
+- Use `.env.local` for development-only frontend values such as `VITE_API_BASE_URL=http://localhost:5001`.
+- Use `.env.production` for production frontend values such as the Render API URL.
+- Keep shared frontend variables in `.env`.
+- Restart the Vite dev server after changing any `VITE_*` value because `import.meta.env` is read at startup.
+- Restart the backend server after changing backend env values so Express reloads the updated configuration.
+
+## Environment Setup
+
+- Use `.env.local` for development-only frontend overrides such as `VITE_API_BASE_URL=http://localhost:5001`.
+- Use `.env.production` for production frontend overrides such as the Render API base URL.
+- Keep shared frontend values in `.env`.
+- Restart the Vite dev server after changing any `VITE_*` variable because `import.meta.env` is resolved at startup.
+- Restart the backend server after changing backend env values so Express reloads the updated configuration.

@@ -1,21 +1,22 @@
+const { ENV } = require('./config/env')
+
 const express = require('express')
 const cors = require('cors')
 const nodemailer = require('nodemailer')
 const { createClient } = require('@supabase/supabase-js')
 
 const app = express()
-const PORT = process.env.PORT || 5001
+const PORT = ENV.PORT
+const SERVER_CONFIGURATION_ERROR = 'Server configuration error'
 
-const supabaseUrl = process.env.SUPABASE_URL
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const supabase =
-  supabaseUrl && supabaseServiceRoleKey
-    ? createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+  ENV.SUPABASE_URL && ENV.SUPABASE_KEY
+    ? createClient(ENV.SUPABASE_URL, ENV.SUPABASE_KEY, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
     : null
 
 const defaultThemeConfig = {
@@ -26,13 +27,51 @@ const defaultThemeConfig = {
   layout: 'grid',
 }
 const defaultLowStockThreshold = 5
+const DEFAULT_WHATSAPP_MESSAGE = 'Hi! I have a question about your products.'
+const WHATSAPP_APP_SLUG = 'whatsapp-chat'
+const WHATSAPP_PHONE_PATTERN = /^[1-9]\d{7,14}$/
+const INVALID_WHATSAPP_PHONE_MESSAGE =
+  'Use a full WhatsApp number with country code. Example: 919876543210'
 
-const apps = [
+const defaultApps = [
   {
     id: 'seo-helper',
+    slug: 'seo-helper',
     name: 'SEO Helper',
-    description: 'Optimize your product SEO and Google visibility',
+    description: 'Improve product metadata, search snippets, and storefront SEO.',
     icon: 'seo-icon',
+    isActive: true,
+  },
+  {
+    id: 'analytics',
+    slug: 'analytics',
+    name: 'Analytics',
+    description: 'Track storefront activity, sales trends, and conversion signals.',
+    icon: 'analytics-icon',
+    isActive: true,
+  },
+  {
+    id: 'product-labels',
+    slug: 'product-labels',
+    name: 'Product Labels',
+    description: 'Highlight bestsellers, new arrivals, sale items, and custom badges.',
+    icon: 'labels-icon',
+    isActive: true,
+  },
+  {
+    id: 'custom-scripts',
+    slug: 'custom-scripts',
+    name: 'Custom Scripts',
+    description: 'Add approved tracking snippets and storefront scripts.',
+    icon: 'scripts-icon',
+    isActive: true,
+  },
+  {
+    id: WHATSAPP_APP_SLUG,
+    slug: WHATSAPP_APP_SLUG,
+    name: 'WhatsApp Chat',
+    description: 'Add a floating WhatsApp button with a pre-filled storefront message.',
+    icon: 'whatsapp-icon',
     isActive: true,
   },
 ]
@@ -40,7 +79,7 @@ const apps = [
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL,
+  ENV.FRONTEND_URL,
 ].filter(Boolean)
 
 app.use(
@@ -68,7 +107,10 @@ app.use(express.json({ limit: '5mb' }))
 
 function requireSupabase(res) {
   if (!supabase) {
-    res.status(500).json({ message: 'Supabase is not configured' })
+    res.status(500).json({
+      error: SERVER_CONFIGURATION_ERROR,
+      message: SERVER_CONFIGURATION_ERROR,
+    })
     return false
   }
 
@@ -130,6 +172,28 @@ function normalizeStoreUrl(value) {
   return slug ? `${slug}.projectx.com` : ''
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value ?? ''),
+  )
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object ?? {}, key)
+}
+
+function getBodyValue(body, snakeKey, camelKey = snakeKey) {
+  if (hasOwn(body, snakeKey)) {
+    return body[snakeKey]
+  }
+
+  if (camelKey !== snakeKey && hasOwn(body, camelKey)) {
+    return body[camelKey]
+  }
+
+  return undefined
+}
+
 function getThemeConfig(themeConfig) {
   return {
     ...defaultThemeConfig,
@@ -151,6 +215,11 @@ function toStore(row) {
     ownerId: row.owner_id,
     ownerEmail: row.owner_email ?? '',
     name: row.name ?? '',
+    description: row.description ?? '',
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    currency: row.currency ?? 'INR',
+    timezone: row.timezone ?? 'Asia/Kolkata',
     slug: isDraft ? '' : row.slug ?? '',
     url: isDraft ? '' : normalizeStoreUrl(subdomain),
     themeId: row.theme_id ?? 'minimal',
@@ -159,6 +228,13 @@ function toStore(row) {
     isOnboardingCompleted: Boolean(row.is_onboarding_completed),
     isDefault: Boolean(row.is_default),
     logoUrl: row.logo_url ?? '',
+    logo_url: row.logo_url ?? '',
+    faviconUrl: row.favicon_url ?? '',
+    favicon_url: row.favicon_url ?? '',
+    primaryColor: row.primary_color ?? '#000000',
+    primary_color: row.primary_color ?? '#000000',
+    secondaryColor: row.secondary_color ?? '#ffffff',
+    secondary_color: row.secondary_color ?? '#ffffff',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -200,6 +276,262 @@ function toStorePage(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
   }
+}
+
+function normalizeAppIdentifier(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+}
+
+function toApp(row) {
+  if (!row) {
+    return null
+  }
+
+  const slug = row.slug ?? row.id
+  const uuid = row.uuid ?? (isUuid(row.id) ? row.id : null)
+
+  return {
+    id: slug,
+    uuid,
+    slug,
+    name: row.name ?? '',
+    description: row.description ?? '',
+    icon: row.icon ?? '',
+    isActive: Boolean(row.is_active ?? row.isActive),
+  }
+}
+
+function getDefaultAppRows() {
+  return defaultApps.map((app) => ({
+    slug: app.slug,
+    name: app.name,
+    description: app.description,
+    icon: app.icon,
+    is_active: app.isActive,
+  }))
+}
+
+async function seedDefaultApps() {
+  const { data, error } = await supabase
+    .from('apps')
+    .upsert(getDefaultAppRows(), { onConflict: 'slug' })
+    .select('*')
+
+  if (error) {
+    throw error
+  }
+
+  return (data ?? []).map(toApp)
+}
+
+function getDefaultApp(appId) {
+  return defaultApps.find((app) => app.id === appId || app.slug === appId) ?? null
+}
+
+function toStoreApp(row, appMap = new Map()) {
+  if (!row) {
+    return null
+  }
+
+  const appId = row.app_id ?? row.appId
+  const app = row.app ?? appMap.get(appId) ?? getDefaultApp(appId)
+
+  return {
+    id: row.id,
+    storeId: row.store_id ?? row.storeId,
+    appId,
+    enabled: Boolean(row.enabled),
+    installedAt: row.installed_at ?? row.created_at ?? '',
+    createdAt: row.created_at ?? '',
+    updatedAt: row.updated_at ?? row.created_at ?? '',
+    app,
+  }
+}
+
+function toStoreAppConfig(row, storeId, app) {
+  return {
+    id: row?.id ?? null,
+    storeId,
+    appId: app.id,
+    appUuid: app.uuid ?? null,
+    appSlug: app.slug,
+    config: row?.config ?? {},
+    createdAt: row?.created_at ?? '',
+    updatedAt: row?.updated_at ?? '',
+    app,
+  }
+}
+
+function getAppConfigDbId(app) {
+  return app?.uuid ?? (isUuid(app?.id) ? app.id : null)
+}
+
+function normalizeWhatsAppPhone(value) {
+  return String(value ?? '')
+    .replace(/\D/g, '')
+    .replace(/^00/, '')
+}
+
+function normalizeWhatsAppPosition(value) {
+  return String(value ?? '').trim().toLowerCase() === 'left' ? 'left' : 'right'
+}
+
+function isValidWhatsAppPhone(value) {
+  return WHATSAPP_PHONE_PATTERN.test(normalizeWhatsAppPhone(value))
+}
+
+function getWhatsAppConfig(config) {
+  return {
+    phone: normalizeWhatsAppPhone(config?.phone),
+    message: String(config?.message ?? DEFAULT_WHATSAPP_MESSAGE).trim() || DEFAULT_WHATSAPP_MESSAGE,
+    position: normalizeWhatsAppPosition(config?.position),
+  }
+}
+
+async function validateStoreRecord(storeId, res) {
+  if (!storeId || !isUuid(storeId)) {
+    res.status(400).json({ message: 'Valid store_id is required' })
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('stores')
+    .select('id')
+    .eq('id', storeId)
+    .maybeSingle()
+
+  if (error) {
+    sendInvalidData(res, error)
+    return null
+  }
+
+  if (!data) {
+    res.status(404).json({ message: 'Store not found' })
+    return null
+  }
+
+  return data
+}
+
+async function getAppByIdentifier(identifier) {
+  const appId = normalizeAppIdentifier(identifier)
+
+  if (!appId) {
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('apps')
+    .select('*')
+    .eq('slug', appId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (data) {
+    return data
+  }
+
+  const seededApps = await seedDefaultApps()
+  return seededApps.find((app) => app.slug === appId || app.id === appId) ?? null
+}
+
+async function getAppsByIds(appIds) {
+  const uniqueAppIds = [...new Set(appIds.filter(Boolean))]
+
+  if (uniqueAppIds.length === 0) {
+    return new Map()
+  }
+
+  const { data, error } = await supabase
+    .from('apps')
+    .select('*')
+    .in('slug', uniqueAppIds)
+
+  if (error) {
+    console.error('Failed to load app metadata from database:', error)
+    return new Map(
+      defaultApps
+        .filter((app) => uniqueAppIds.includes(app.id))
+        .map((app) => [app.id, app]),
+    )
+  }
+
+  return new Map((data ?? []).map((app) => [app.slug, toApp(app)]))
+}
+
+async function getInstalledStoreApps(storeId) {
+  const { data, error } = await supabase
+    .from('store_apps')
+    .select('*')
+    .eq('store_id', storeId)
+
+  if (error) {
+    throw error
+  }
+
+  const appMap = await getAppsByIds((data ?? []).map((storeApp) => storeApp.app_id))
+  return (data ?? []).map((storeApp) => toStoreApp(storeApp, appMap))
+}
+
+async function getActiveStoreApps(storeId) {
+  const { data, error } = await supabase
+    .from('store_apps')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('enabled', true)
+
+  if (error) {
+    throw error
+  }
+
+  const installedApps = data ?? []
+  const appMap = await getAppsByIds(installedApps.map((storeApp) => storeApp.app_id))
+  const configIds = installedApps
+    .map((storeApp) => getAppConfigDbId(appMap.get(storeApp.app_id) ?? getDefaultApp(storeApp.app_id)))
+    .filter(Boolean)
+  const uniqueConfigIds = [...new Set(configIds)]
+  let configMap = new Map()
+
+  if (uniqueConfigIds.length > 0) {
+    const { data: configRows, error: configError } = await supabase
+      .from('store_app_configs')
+      .select('*')
+      .eq('store_id', storeId)
+      .in('app_id', uniqueConfigIds)
+
+    if (configError) {
+      throw configError
+    }
+
+    configMap = new Map((configRows ?? []).map((configRow) => [configRow.app_id, configRow]))
+  }
+
+  return installedApps
+    .map((storeApp) => {
+      const app = appMap.get(storeApp.app_id) ?? getDefaultApp(storeApp.app_id)
+
+      if (!app || app.isActive === false) {
+        return null
+      }
+
+      const configId = getAppConfigDbId(app)
+      const configRow = configId ? configMap.get(configId) : null
+      const config =
+        app.slug === WHATSAPP_APP_SLUG
+          ? getWhatsAppConfig(configRow?.config)
+          : configRow?.config ?? {}
+
+      return {
+        ...toStoreApp(storeApp, appMap),
+        config,
+      }
+    })
+    .filter(Boolean)
 }
 
 function normalizePageSlug(value) {
@@ -648,6 +980,52 @@ async function getStoreById(storeId) {
   return data
 }
 
+function getDateKeyInTimeZone(value, timeZone = 'UTC') {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
+}
+
+function buildSalesTrendWindow(timeZone = 'UTC', days = 7) {
+  const now = new Date()
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const labelFormatter = new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    day: '2-digit',
+    month: 'short',
+  })
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - (days - 1 - index))
+
+    return {
+      date: dateFormatter.format(date),
+      label: labelFormatter.format(date),
+      revenue: 0,
+    }
+  })
+}
+
+function getOrderSoldQuantity(order) {
+  if (Array.isArray(order?.products) && order.products.length > 0) {
+    return order.products.reduce(
+      (total, product) => total + (Number(product.quantity) || 1),
+      0,
+    )
+  }
+
+  return 1
+}
+
 async function createOrderTimelineEntry(orderId, status, message) {
   const { data, error } = await supabase
     .from('order_timeline')
@@ -768,17 +1146,17 @@ function getCurrency(value) {
 }
 
 function createMailTransport() {
-  if (process.env.SMTP_HOST) {
+  if (ENV.SMTP_HOST) {
     return nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
+      host: ENV.SMTP_HOST,
+      port: ENV.SMTP_PORT,
+      secure: ENV.SMTP_SECURE,
       auth:
-        process.env.SMTP_USER && process.env.SMTP_PASS
+        ENV.SMTP_USER && ENV.SMTP_PASS
           ? {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          }
+              user: ENV.SMTP_USER,
+              pass: ENV.SMTP_PASS,
+            }
           : undefined,
     })
   }
@@ -789,7 +1167,7 @@ function createMailTransport() {
 async function notifyNewOrder(order) {
   try {
     const store = await getStoreById(order.storeId)
-    const recipient = store?.owner_email || process.env.ORDER_NOTIFICATION_EMAIL || process.env.SMTP_USER
+    const recipient = store?.owner_email || ENV.ORDER_NOTIFICATION_EMAIL || ENV.SMTP_USER
 
     if (!recipient) {
       return
@@ -800,7 +1178,7 @@ async function notifyNewOrder(order) {
       .join('\n')
 
     await createMailTransport().sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'Project X <no-reply@projectx.local>',
+      from: ENV.SMTP_FROM || ENV.SMTP_USER || 'Project X <no-reply@projectx.local>',
       to: recipient,
       subject: 'New order received',
       text: [
@@ -990,6 +1368,129 @@ app.delete('/products/:id', async (req, res) => {
   if (error) return sendInvalidData(res, error)
   if (!data) return res.status(404).json({ message: 'Product not found' })
   res.json({ message: 'Product deleted successfully' })
+})
+
+app.get('/store/has-products', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+    if (!(await validateStoreRecord(storeId, res))) return
+
+    const { count, error } = await supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('store_id', storeId)
+
+    if (error) return sendInvalidData(res, error)
+
+    res.json({
+      hasProducts: Number(count) > 0,
+    })
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
+app.get('/dashboard', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = requireStoreId(req, res)
+    if (!storeId) return
+
+    const store = await getStoreById(storeId)
+    if (!store) return res.status(404).json({ message: 'Store not found' })
+
+    const [{ data: orderRows, error: ordersError }, { data: productRows, error: productsError }] =
+      await Promise.all([
+        supabase.from('orders').select('*').eq('store_id', storeId).order('created_at', { ascending: false }),
+        supabase.from('products').select('*').eq('store_id', storeId).order('created_at', { ascending: false }),
+      ])
+
+    if (ordersError) return sendInvalidData(res, ordersError)
+    if (productsError) return sendInvalidData(res, productsError)
+
+    const orders = (orderRows ?? []).map(toOrder)
+    const products = (productRows ?? []).map(toProduct)
+    const timeZone = store.timezone || 'Asia/Kolkata'
+    const salesTrend = buildSalesTrendWindow(timeZone, 7)
+    const salesTrendMap = new Map(salesTrend.map((item) => [item.date, item]))
+    const todayKey = getDateKeyInTimeZone(new Date(), timeZone)
+    const recentOrders = orders.slice(0, 5).map((order) => ({
+      id: order.id,
+      total_amount: Number(order.finalAmount ?? order.totalAmount) || 0,
+      payment_method: order.paymentMethod ?? 'cod',
+    }))
+
+    let revenueToday = 0
+    let revenue7Days = 0
+    let totalRevenue = 0
+    let productsSold = 0
+    const topProductsMap = new Map()
+
+    for (const order of orders) {
+      const orderRevenue = Number(order.finalAmount ?? order.totalAmount) || 0
+      const orderDateKey = getDateKeyInTimeZone(order.createdAt, timeZone)
+      const trendBucket = salesTrendMap.get(orderDateKey)
+      totalRevenue += orderRevenue
+      productsSold += getOrderSoldQuantity(order)
+
+      if (trendBucket) {
+        trendBucket.revenue += orderRevenue
+        revenue7Days += orderRevenue
+      }
+
+      if (orderDateKey === todayKey) {
+        revenueToday += orderRevenue
+      }
+
+      for (const product of order.products ?? []) {
+        const productKey = String(product.productId ?? product.title ?? '')
+        const currentTotal = topProductsMap.get(productKey) ?? {
+          title: product.title || 'Untitled product',
+          total_sold: 0,
+        }
+
+        currentTotal.total_sold += Number(product.quantity) || 1
+        topProductsMap.set(productKey, currentTotal)
+      }
+    }
+
+    const topProducts = [...topProductsMap.values()]
+      .sort((left, right) => right.total_sold - left.total_sold)
+      .slice(0, 5)
+
+    const lowStock = products
+      .filter((product) => product.quantity <= product.lowStockThreshold)
+      .sort((left, right) => left.quantity - right.quantity)
+      .slice(0, 5)
+      .map((product) => ({
+        id: product.id,
+        title: product.title,
+        quantity: product.quantity,
+      }))
+
+    res.json({
+      metrics: {
+        revenue_today: revenueToday,
+        revenue_7_days: revenue7Days,
+        total_orders: orders.length,
+        avg_order_value: orders.length > 0 ? totalRevenue / orders.length : 0,
+      },
+      products_sold: productsSold,
+      sales_trend: salesTrend.map((item) => ({
+        date: item.date,
+        revenue: item.revenue,
+      })),
+      recent_orders: recentOrders,
+      top_products: topProducts,
+      low_stock: lowStock,
+    })
+  } catch (error) {
+    sendServerError(res, error)
+  }
 })
 
 app.get('/categories', async (req, res) => {
@@ -1715,6 +2216,75 @@ app.put('/stores/:id', async (req, res) => {
   }
 })
 
+app.patch('/stores/:id', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  try {
+    const storeId = req.params.id
+
+    if (!isUuid(storeId)) {
+      return res.status(400).json({ message: 'Valid store_id is required' })
+    }
+
+    const settingsFields = [
+      { bodyKey: 'description', column: 'description' },
+      { bodyKey: 'email', column: 'email' },
+      { bodyKey: 'phone', column: 'phone' },
+      { bodyKey: 'currency', column: 'currency' },
+      { bodyKey: 'timezone', column: 'timezone' },
+      { bodyKey: 'logo_url', camelKey: 'logoUrl', column: 'logo_url' },
+      { bodyKey: 'favicon_url', camelKey: 'faviconUrl', column: 'favicon_url' },
+      { bodyKey: 'primary_color', camelKey: 'primaryColor', column: 'primary_color' },
+      { bodyKey: 'secondary_color', camelKey: 'secondaryColor', column: 'secondary_color' },
+    ]
+    const update = {}
+
+    if (hasOwn(req.body, 'name')) {
+      const name = String(req.body.name ?? '').trim()
+
+      if (!name) {
+        return res.status(400).json({ message: 'Store name is required' })
+      }
+
+      update.name = name
+    }
+
+    settingsFields.forEach((field) => {
+      const value = getBodyValue(req.body, field.bodyKey, field.camelKey)
+
+      if (value !== undefined) {
+        update[field.column] = typeof value === 'string' ? value.trim() : value
+      }
+    })
+
+    if (Object.keys(update).length === 0) {
+      const { data: store, error: storeError } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('id', storeId)
+        .maybeSingle()
+
+      if (storeError) return sendInvalidData(res, storeError)
+      if (!store) return res.status(404).json({ message: 'Store not found' })
+      return res.json(toStore(store))
+    }
+
+    const { data, error } = await supabase
+      .from('stores')
+      .update(update)
+      .eq('id', storeId)
+      .select()
+      .maybeSingle()
+
+    if (error) return sendInvalidData(res, error)
+    if (!data) return res.status(404).json({ message: 'Store not found' })
+
+    res.json(toStore(data))
+  } catch (error) {
+    sendServerError(res, error)
+  }
+})
+
 app.get('/stores/detail/:id', async (req, res) => {
   if (!requireSupabase(res)) return
 
@@ -2231,65 +2801,397 @@ async function checkStoreSlugAvailability(req, res) {
 
 app.get('/store/check-slug', checkStoreSlugAvailability)
 
-app.get('/apps', (req, res) => {
-  res.json(apps)
+app.get('/apps', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const fetchApps = () =>
+    supabase
+      .from('apps')
+      .select('*')
+      .order('name', { ascending: true })
+
+  let { data, error } = await fetchApps()
+
+  if (error) {
+    console.error('Failed to load apps from database:', error)
+    return res.json(defaultApps)
+  }
+
+  if (!data?.length) {
+    try {
+      return res.json(await seedDefaultApps())
+    } catch (seedError) {
+      console.error('Failed to seed default apps:', seedError)
+      return res.json(defaultApps)
+    }
+  }
+
+  const installedSlugs = new Set((data ?? []).map((app) => app.slug))
+  const hasMissingDefaults = defaultApps.some((defaultApp) => !installedSlugs.has(defaultApp.slug))
+
+  if (hasMissingDefaults) {
+    try {
+      await seedDefaultApps()
+      const nextAppsResponse = await fetchApps()
+      data = nextAppsResponse.data
+      error = nextAppsResponse.error
+    } catch (seedError) {
+      console.error('Failed to sync default apps:', seedError)
+    }
+  }
+
+  if (error) {
+    console.error('Failed to load synced apps from database:', error)
+    return res.json(defaultApps)
+  }
+
+  res.json(data.map(toApp))
+})
+
+app.get('/apps/installed', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    res.json(await getInstalledStoreApps(storeId))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
+})
+
+app.get(['/apps/active', '/api/apps/active'], async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    res.json(await getActiveStoreApps(storeId))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
+})
+
+app.post('/apps/install', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  const appId = getBodyValue(req.body, 'app_id', 'appId')
+  if (!appId) return res.status(400).json({ message: 'app_id is required' })
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    const appRecord = await getAppByIdentifier(appId)
+    const appDetails = toApp(appRecord)
+
+    if (!appDetails?.isActive) {
+      return res.status(400).json({ message: 'Invalid app_id' })
+    }
+
+    const { data, error } = await supabase
+      .from('store_apps')
+      .upsert(
+        [{ store_id: storeId, app_id: appDetails.id, enabled: true }],
+        { onConflict: 'store_id,app_id' },
+      )
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+
+    const { error: configError } = await supabase
+      .from('store_app_configs')
+      .upsert(
+        [{ store_id: storeId, app_id: getAppConfigDbId(appDetails), config: {} }],
+        { onConflict: 'store_id,app_id' },
+      )
+
+    if (configError) return sendInvalidData(res, configError)
+
+    res.status(201).json(toStoreApp(data, new Map([[appDetails.id, appDetails]])))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
+})
+
+app.post('/apps/uninstall', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  const appId = normalizeAppIdentifier(getBodyValue(req.body, 'app_id', 'appId'))
+  if (!appId) return res.status(400).json({ message: 'app_id is required' })
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  let configAppId = appId
+
+  try {
+    const appDetails = toApp(await getAppByIdentifier(appId))
+    configAppId = getAppConfigDbId(appDetails) ?? appId
+  } catch (error) {
+    console.error('Failed to resolve app config id during uninstall:', error)
+  }
+
+  const { error: configError } = await supabase
+    .from('store_app_configs')
+    .delete()
+    .eq('store_id', storeId)
+    .eq('app_id', configAppId)
+
+  if (configError) return sendInvalidData(res, configError)
+
+  const { error } = await supabase
+    .from('store_apps')
+    .delete()
+    .eq('store_id', storeId)
+    .eq('app_id', appId)
+
+  if (error) return sendInvalidData(res, error)
+  res.json({ success: true, storeId, appId })
+})
+
+app.patch('/apps/installed', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  const appId = normalizeAppIdentifier(getBodyValue(req.body, 'app_id', 'appId'))
+  const enabled = getBodyValue(req.body, 'enabled')
+  if (!appId || typeof enabled !== 'boolean') {
+    return res.status(400).json({ message: 'store_id, app_id, and enabled are required' })
+  }
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    const { data, error } = await supabase
+      .from('store_apps')
+      .update({ enabled })
+      .eq('store_id', storeId)
+      .eq('app_id', appId)
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+
+    const appMap = await getAppsByIds([data.app_id])
+    res.json(toStoreApp(data, appMap))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
+})
+
+app.get('/apps/config', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  const appSlug = normalizeAppIdentifier(
+    req.query.app_slug ?? req.query.appSlug ?? req.query.app_id ?? req.query.appId,
+  )
+  if (!appSlug) return res.status(400).json({ message: 'app_slug is required' })
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    const appRecord = await getAppByIdentifier(appSlug)
+    const appDetails = toApp(appRecord)
+
+    if (!appDetails) {
+      return res.status(404).json({ message: 'App not found' })
+    }
+
+    const { data, error } = await supabase
+      .from('store_app_configs')
+      .select('*')
+      .eq('store_id', storeId)
+      .eq('app_id', getAppConfigDbId(appDetails))
+      .maybeSingle()
+
+    if (error) return sendInvalidData(res, error)
+    res.json(toStoreAppConfig(data, storeId, appDetails))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
+})
+
+app.patch('/apps/config', async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  const appSlug = normalizeAppIdentifier(
+    getBodyValue(req.body, 'app_slug', 'appSlug') ?? getBodyValue(req.body, 'app_id', 'appId'),
+  )
+  const config = getBodyValue(req.body, 'config')
+  if (!appSlug) return res.status(400).json({ message: 'app_slug is required' })
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return res.status(400).json({ message: 'config must be an object' })
+  }
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    const appRecord = await getAppByIdentifier(appSlug)
+    const appDetails = toApp(appRecord)
+
+    if (!appDetails) {
+      return res.status(404).json({ message: 'App not found' })
+    }
+
+    const { data, error } = await supabase
+      .from('store_app_configs')
+      .upsert(
+        [{ store_id: storeId, app_id: getAppConfigDbId(appDetails), config }],
+        { onConflict: 'store_id,app_id' },
+      )
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+    res.json(toStoreAppConfig(data, storeId, appDetails))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
+})
+
+app.post(['/apps/whatsapp/save', '/api/apps/whatsapp/save'], async (req, res) => {
+  if (!requireSupabase(res)) return
+
+  const storeId = getRequestStoreId(req)
+  const enabledValue = getBodyValue(req.body, 'is_enabled', 'isEnabled')
+  const isEnabled = typeof enabledValue === 'boolean' ? enabledValue : true
+  const config = getWhatsAppConfig(req.body)
+
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  if (isEnabled && !config.phone) {
+    return res.status(400).json({ message: 'phone is required when WhatsApp chat is enabled' })
+  }
+
+  if (isEnabled && !isValidWhatsAppPhone(config.phone)) {
+    return res.status(400).json({ message: INVALID_WHATSAPP_PHONE_MESSAGE })
+  }
+
+  try {
+    const appRecord = await getAppByIdentifier(WHATSAPP_APP_SLUG)
+    const appDetails = toApp(appRecord)
+
+    if (!appDetails?.isActive) {
+      return res.status(404).json({ message: 'WhatsApp Chat app not found' })
+    }
+
+    const [{ data: storeAppRow, error: storeAppError }, { data: configRow, error: configError }] =
+      await Promise.all([
+        supabase
+          .from('store_apps')
+          .upsert(
+            [{ store_id: storeId, app_id: appDetails.id, enabled: isEnabled }],
+            { onConflict: 'store_id,app_id' },
+          )
+          .select('*')
+          .single(),
+        supabase
+          .from('store_app_configs')
+          .upsert(
+            [{ store_id: storeId, app_id: getAppConfigDbId(appDetails), config }],
+            { onConflict: 'store_id,app_id' },
+          )
+          .select('*')
+          .single(),
+      ])
+
+    if (storeAppError) return sendInvalidData(res, storeAppError)
+    if (configError) return sendInvalidData(res, configError)
+
+    res.json({
+      app: appDetails,
+      storeApp: toStoreApp(storeAppRow, new Map([[appDetails.id, appDetails]])),
+      config: configRow?.config ?? config,
+      enabled: isEnabled,
+      isEnabled,
+    })
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
 })
 
 app.get('/store-apps/:storeId', async (req, res) => {
   if (!requireSupabase(res)) return
-  const { data, error } = await supabase.from('store_apps').select('*').eq('store_id', req.params.storeId)
-  if (error) return sendInvalidData(res, error)
-  res.json(
-    data.map((storeApp) => ({
-      id: storeApp.id,
-      storeId: storeApp.store_id,
-      appId: storeApp.app_id,
-      enabled: storeApp.enabled,
-      app: apps.find((availableApp) => availableApp.id === storeApp.app_id) ?? null,
-    })),
-  )
+
+  if (!(await validateStoreRecord(req.params.storeId, res))) return
+
+  try {
+    res.json(await getInstalledStoreApps(req.params.storeId))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
 })
 
 app.post('/store-apps/install', async (req, res) => {
   if (!requireSupabase(res)) return
-  const { storeId, appId } = req.body
-  if (!storeId || !appId) return res.status(400).json({ message: 'storeId and appId are required' })
-  if (!apps.some((app) => app.id === appId && app.isActive)) return res.status(400).json({ message: 'Invalid appId' })
 
-  const { data, error } = await supabase
-    .from('store_apps')
-    .upsert([{ store_id: storeId, app_id: appId, enabled: true }], { onConflict: 'store_id,app_id' })
-    .select()
-    .single()
-  if (error) return sendInvalidData(res, error)
-  res.status(201).json({
-    id: data.id,
-    storeId: data.store_id,
-    appId: data.app_id,
-    enabled: data.enabled,
-    app: apps.find((app) => app.id === data.app_id) ?? null,
-  })
+  const storeId = req.body.storeId ?? req.body.store_id
+  const appId = req.body.appId ?? req.body.app_id
+  if (!appId) return res.status(400).json({ message: 'appId is required' })
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    const appRecord = await getAppByIdentifier(appId)
+    const appDetails = toApp(appRecord)
+
+    if (!appDetails?.isActive) {
+      return res.status(400).json({ message: 'Invalid appId' })
+    }
+
+    const { data, error } = await supabase
+      .from('store_apps')
+      .upsert(
+        [{ store_id: storeId, app_id: appDetails.id, enabled: true }],
+        { onConflict: 'store_id,app_id' },
+      )
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+
+    const { error: configError } = await supabase
+      .from('store_app_configs')
+      .upsert(
+        [{ store_id: storeId, app_id: getAppConfigDbId(appDetails), config: {} }],
+        { onConflict: 'store_id,app_id' },
+      )
+
+    if (configError) return sendInvalidData(res, configError)
+
+    res.status(201).json(toStoreApp(data, new Map([[appDetails.id, appDetails]])))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
 })
 
 app.post('/store-apps/toggle', async (req, res) => {
   if (!requireSupabase(res)) return
-  const { storeId, appId, enabled } = req.body
-  if (!storeId || !appId || typeof enabled !== 'boolean') return res.status(400).json({ message: 'storeId, appId, and enabled are required' })
-  const { data, error } = await supabase
-    .from('store_apps')
-    .update({ enabled })
-    .eq('store_id', storeId)
-    .eq('app_id', appId)
-    .select()
-    .single()
-  if (error) return sendInvalidData(res, error)
-  res.json({
-    id: data.id,
-    storeId: data.store_id,
-    appId: data.app_id,
-    enabled: data.enabled,
-    app: apps.find((app) => app.id === data.app_id) ?? null,
-  })
+
+  const storeId = req.body.storeId ?? req.body.store_id
+  const appId = normalizeAppIdentifier(req.body.appId ?? req.body.app_id)
+  const enabled = req.body.enabled
+  if (!appId || typeof enabled !== 'boolean') {
+    return res.status(400).json({ message: 'storeId, appId, and enabled are required' })
+  }
+  if (!(await validateStoreRecord(storeId, res))) return
+
+  try {
+    const { data, error } = await supabase
+      .from('store_apps')
+      .update({ enabled })
+      .eq('store_id', storeId)
+      .eq('app_id', appId)
+      .select()
+      .single()
+
+    if (error) return sendInvalidData(res, error)
+
+    const appMap = await getAppsByIds([data.app_id])
+    res.json(toStoreApp(data, appMap))
+  } catch (error) {
+    sendInvalidData(res, error)
+  }
 })
 
 app.get('/store-by-url/:subdomain', async (req, res) => {
@@ -2333,7 +3235,7 @@ app.get('/users', async (req, res) => {
 })
 
 app.get('/verify', (req, res) => {
-  res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?verified=true`)
+  res.redirect(`${ENV.FRONTEND_URL || 'http://localhost:5173'}/login?verified=true`)
 })
 
 app.listen(PORT, () => {

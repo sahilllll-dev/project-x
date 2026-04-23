@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { createOrder, getProductBySlug, validateCoupon } from '../../utils/api.js'
+import { createOrder, getProductBySlug, getStoreById, validateCoupon } from '../../utils/api.js'
 import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
+import { setDocumentFavicon } from '../../utils/favicon.js'
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('en-IN', {
@@ -38,20 +39,56 @@ function ProductDetail() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
 
   useEffect(() => {
+    let isCancelled = false
+
     async function loadProduct() {
       setIsLoading(true)
 
       try {
-        setProduct(await getProductBySlug(slug, storeId))
+        const nextProduct = await getProductBySlug(slug, storeId)
+
+        if (isCancelled) {
+          return
+        }
+
+        setProduct(nextProduct)
+
+        if (nextProduct?.storeId) {
+          try {
+            const store = await getStoreById(nextProduct.storeId)
+
+            if (!isCancelled) {
+              setDocumentFavicon(store?.faviconUrl)
+            }
+          } catch (storeError) {
+            console.error(storeError)
+
+            if (!isCancelled) {
+              setDocumentFavicon()
+            }
+          }
+        } else {
+          setDocumentFavicon()
+        }
       } catch (error) {
         console.error(error)
-        setProduct(null)
+
+        if (!isCancelled) {
+          setProduct(null)
+          setDocumentFavicon()
+        }
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
     loadProduct()
+
+    return () => {
+      isCancelled = true
+    }
   }, [slug, storeId])
 
   function handleCheckoutFieldChange(event) {

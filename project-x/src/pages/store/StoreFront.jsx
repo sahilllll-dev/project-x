@@ -2,18 +2,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   createOrder,
+  getActiveApps,
   getPageBySlug,
   getProducts,
-  getStoreApps,
   getStoreByUrl,
   getStorePage,
   validateCoupon,
 } from '../../utils/api.js'
+import WhatsAppWidget from '../../components/WhatsAppWidget.jsx'
 import ThemeRenderer from '../../components/themes/ThemeRenderer.jsx'
 import PageRenderer from '../../components/page-builder/PageRenderer.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
+import { setDocumentFavicon } from '../../utils/favicon.js'
 
 function normalizeSubdomain(value) {
   return String(value || '')
@@ -77,6 +79,7 @@ function StoreFront() {
   const [customPage, setCustomPage] = useState(null)
   const [isCustomPageNotFound, setIsCustomPageNotFound] = useState(false)
   const [useSeoProductUrls, setUseSeoProductUrls] = useState(false)
+  const [whatsAppConfig, setWhatsAppConfig] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [checkoutForm, setCheckoutForm] = useState({
@@ -112,6 +115,8 @@ function StoreFront() {
       setIsLoading(true)
       setCustomPage(null)
       setIsCustomPageNotFound(false)
+      setUseSeoProductUrls(false)
+      setWhatsAppConfig(null)
 
       try {
         if (!storeSubdomain) {
@@ -126,9 +131,9 @@ function StoreFront() {
         setStore(matchedStore)
         console.log('Store ID:', matchedStore.id)
 
-        const [response, installedApps] = await Promise.all([
+        const [response, activeApps] = await Promise.all([
           getProducts(matchedStore.id),
-          getStoreApps(matchedStore.id),
+          getActiveApps(matchedStore.id),
         ])
         if (isCancelled) {
           return
@@ -136,7 +141,11 @@ function StoreFront() {
 
         console.log('Products:', response)
         setUseSeoProductUrls(
-          installedApps.some((storeApp) => storeApp.appId === 'seo-helper' && storeApp.enabled),
+          activeApps.some((storeApp) => (storeApp.app?.slug ?? storeApp.appId) === 'seo-helper'),
+        )
+        setWhatsAppConfig(
+          activeApps.find((storeApp) => (storeApp.app?.slug ?? storeApp.appId) === 'whatsapp-chat')
+            ?.config ?? null,
         )
         const activeProducts = response.filter((product) => product.status === 'active')
         setProducts(activeProducts.length > 0 ? activeProducts : response)
@@ -189,6 +198,7 @@ function StoreFront() {
           url: derivedStoreUrl,
         })
         setUseSeoProductUrls(false)
+        setWhatsAppConfig(null)
         setProducts([])
         setPageLayout(null)
         setCustomPage(null)
@@ -206,6 +216,10 @@ function StoreFront() {
       isCancelled = true
     }
   }, [customPageSlug, derivedStoreUrl, showToast, storeName, storeSubdomain])
+
+  useEffect(() => {
+    setDocumentFavicon(store?.faviconUrl)
+  }, [store?.faviconUrl])
 
   function handleCheckoutFieldChange(event) {
     const { name, value } = event.target
@@ -386,6 +400,14 @@ function StoreFront() {
           renderTheme()
         )}
       </div>
+
+      {whatsAppConfig?.phone ? (
+        <WhatsAppWidget
+          phone={whatsAppConfig.phone}
+          message={whatsAppConfig.message}
+          position={whatsAppConfig.position}
+        />
+      ) : null}
 
       {selectedProduct ? (
         <div className="modal-backdrop" role="presentation">
